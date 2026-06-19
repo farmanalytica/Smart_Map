@@ -443,6 +443,17 @@ class smart_map:
             kriging_view, self.data_ctrl, self.variogram_ctrl,
             self.interp_mgr, self.icon_path, self.path_absolute, self.tr
         )
+        # Boundary state lives on grid_ctrl (data_ctrl exposes it via delegating
+        # properties); give the kriging controller a direct grid_ctrl reference too.
+        self.kriging_ctrl.grid_ctrl = self.grid_ctrl
+
+        # The interpolation widgets are split across the variogram and kriging tabs but
+        # the controllers need to read each other's tab (e.g. plot_variogram enables the
+        # kriging widgets; kriging reads the fitted model/nugget/range/sill from the
+        # variogram tab). Give each controller a reference to the other view so each
+        # widget keeps a single owner (no duplicated state).
+        self.variogram_ctrl.kriging_view = kriging_view
+        self.kriging_ctrl.variogram_view = variogram_view
 
         # SVM controller
         self.svm_ctrl = SVMController(
@@ -494,6 +505,52 @@ class smart_map:
         )
         kriging_view.pushButton_Validacao_Cruzada_OK.clicked.connect(
             self.kriging_ctrl.on_cross_validation_clicked
+        )
+        kriging_view.pushButton_Krigagem_All_Variables.clicked.connect(
+            self.kriging_ctrl.on_kriging_all_variables_clicked
+        )
+        kriging_view.checkBox_Krigagem_Alcance.toggled.connect(
+            self.variogram_ctrl.on_use_range_for_search_toggled
+        )
+        kriging_view.lineEdit_OK_VBNumMax.editingFinished.connect(
+            self.variogram_ctrl.on_vb_num_max_edited
+        )
+        kriging_view.lineEdit_OK_VBRaio.editingFinished.connect(
+            self.variogram_ctrl.on_vb_raio_edited
+        )
+
+        # Semivariogram list (lives on the variogram tab) drives batch kriging selection.
+        variogram_view.datatable_semivariogramas.itemClicked.connect(
+            self.kriging_ctrl.on_semivariogram_checkbox_clicked
+        )
+        variogram_view.datatable_semivariogramas.doubleClicked.connect(
+            self.variogram_ctrl.on_semivariogram_table_double_clicked
+        )
+
+        # Variogram tuning edit handlers
+        variogram_view.lineEdit_OK_DMax.editingFinished.connect(
+            self.variogram_ctrl.on_dmax_edited
+        )
+        variogram_view.lineEdit_OK_lags_dist.editingFinished.connect(
+            self.variogram_ctrl.on_lags_distance_edited
+        )
+        variogram_view.lineEdit_Nugget.editingFinished.connect(
+            self.variogram_ctrl.on_nugget_edited
+        )
+        variogram_view.lineEdit_Sill.editingFinished.connect(
+            self.variogram_ctrl.on_sill_edited
+        )
+        variogram_view.lineEdit_Range.editingFinished.connect(
+            self.variogram_ctrl.on_range_edited
+        )
+        variogram_view.horizontalSlider_Nugget.valueChanged.connect(
+            self.variogram_ctrl.on_nugget_slider_changed
+        )
+        variogram_view.horizontalSlider_Sill.valueChanged.connect(
+            self.variogram_ctrl.on_sill_slider_changed
+        )
+        variogram_view.horizontalSlider_Range.valueChanged.connect(
+            self.variogram_ctrl.on_range_slider_changed
         )
 
         # Wire SVM view signals

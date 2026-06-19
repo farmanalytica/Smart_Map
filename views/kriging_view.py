@@ -17,7 +17,8 @@ class KrigingView(QWidget):
         layout = QVBoxLayout()
 
         # Parameters
-        params_group = QGroupBox(self.tr('Parâmetros de Busca'))
+        self.groupBox_Krigagem = QGroupBox(self.tr('Parâmetros de Busca'))
+        params_group = self.groupBox_Krigagem
         params_layout = QHBoxLayout()
         params_layout.addWidget(QLabel(self.tr('Nº Vizinhos:')))
         self.lineEdit_OK_VBNumMax = QtWidgets.QLineEdit('16')
@@ -53,37 +54,48 @@ class KrigingView(QWidget):
         btn_layout.addWidget(self.pushButton_Krigagem)
         self.pushButton_Validacao_Cruzada_OK = QPushButton(self.tr('Validação Cruzada'))
         btn_layout.addWidget(self.pushButton_Validacao_Cruzada_OK)
+        self.pushButton_Krigagem_All_Variables = QPushButton(self.tr('Krigar Todas as Variáveis'))
+        self.pushButton_Krigagem_All_Variables.setEnabled(False)
+        btn_layout.addWidget(self.pushButton_Krigagem_All_Variables)
+        # Show interpolated maps in a matplotlib window when checked.
+        self.checkBox_Qgis_Maps = QCheckBox(self.tr('Exibir Mapas'))
+        btn_layout.addWidget(self.checkBox_Qgis_Maps)
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
 
-        # Results tabs
-        self.tabs_kriging = QtWidgets.QTabWidget()
+        # Results tabs. Index order matches the legacy tabWidget_Interpolacao_OK:
+        #   0 = variogram / kriging map, 1 = cross-validation, 2 = interpolated points.
+        self.tabWidget_Interpolacao_OK = QtWidgets.QTabWidget()
+        self.tabs_kriging = self.tabWidget_Interpolacao_OK  # backwards-compatible alias
 
-        # Interpolated points tab
+        # Tab 0: kriging map visualization
+        map_widget = QWidget()
+        map_layout = QVBoxLayout()
+        self.label_Krigagem = QtWidgets.QLabel(self.tr('Mapa de Kriging...'))
+        self.label_Krigagem.setMinimumHeight(200)
+        map_layout.addWidget(self.label_Krigagem)
+        map_widget.setLayout(map_layout)
+        self.tabWidget_Interpolacao_OK.addTab(map_widget, self.tr('Mapa Interpolado'))
+
+        # Tab 1: cross-validation
+        cv_widget = QWidget()
+        cv_layout = QVBoxLayout()
+        self.datatable_validacao_cruzada_OK = QTableWidget()
+        cv_layout.addWidget(self.datatable_validacao_cruzada_OK)
+        self.label_validacao_cruzada_OK = QtWidgets.QLabel(self.tr('Gráfico CV...'))
+        self.label_validacao_cruzada_OK.setMinimumHeight(200)
+        cv_layout.addWidget(self.label_validacao_cruzada_OK)
+        cv_widget.setLayout(cv_layout)
+        self.tabWidget_Interpolacao_OK.addTab(cv_widget, self.tr('Validação Cruzada'))
+
+        # Tab 2: interpolated points
         points_widget = QWidget()
         points_layout = QVBoxLayout()
         self.datatable_pontos_interpolados_OK = QTableWidget()
         points_layout.addWidget(self.datatable_pontos_interpolados_OK)
         points_widget.setLayout(points_layout)
-        self.tabs_kriging.addTab(points_widget, self.tr('Pontos Interpolados'))
+        self.tabWidget_Interpolacao_OK.addTab(points_widget, self.tr('Pontos Interpolados'))
 
-        # Cross-validation tab
-        cv_widget = QWidget()
-        cv_layout = QVBoxLayout()
-        self.datatable_validacao_cruzada_OK = QTableWidget()
-        cv_layout.addWidget(self.datatable_validacao_cruzada_OK)
-        cv_widget.setLayout(cv_layout)
-        self.tabs_kriging.addTab(cv_widget, self.tr('Validação Cruzada'))
-
-        layout.addWidget(self.tabs_kriging)
-
-        # Map visualization
-        self.label_Krigagem = QtWidgets.QLabel(self.tr('Mapa de Kriging...'))
-        self.label_Krigagem.setMinimumHeight(200)
-        layout.addWidget(self.label_Krigagem)
-
-        self.label_validacao_cruzada_OK = QtWidgets.QLabel(self.tr('Gráfico CV...'))
-        self.label_validacao_cruzada_OK.setMinimumHeight(200)
-        layout.addWidget(self.label_validacao_cruzada_OK)
+        layout.addWidget(self.tabWidget_Interpolacao_OK)
 
         self.setLayout(layout)

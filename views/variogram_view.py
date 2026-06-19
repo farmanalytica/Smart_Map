@@ -17,12 +17,15 @@ class VariogramView(QWidget):
         layout = QVBoxLayout()
 
         # Model selection
-        model_group = QGroupBox(self.tr('Modelo de Variograma'))
+        self.groupBox_Variograma_Model = QGroupBox(self.tr('Modelo de Variograma'))
+        model_group = self.groupBox_Variograma_Model
         model_layout = QHBoxLayout()
         model_layout.addWidget(QLabel(self.tr('Modelo:')))
         self.comboBox_Modelo = QComboBox()
         self.comboBox_Modelo.addItems(['Linear', 'Linear-Sill', 'Exponential', 'Spherical', 'Gaussian'])
         model_layout.addWidget(self.comboBox_Modelo)
+        self.checkBox_Variogram_Variancia = QCheckBox(self.tr('Variância Amostral'))
+        model_layout.addWidget(self.checkBox_Variogram_Variancia)
         model_layout.addStretch()
         model_group.setLayout(model_layout)
         layout.addWidget(model_group)
@@ -102,5 +105,16 @@ class VariogramView(QWidget):
         self.label_Variograma = QtWidgets.QLabel(self.tr('Variograma...'))
         self.label_Variograma.setMinimumHeight(250)
         layout.addWidget(self.label_Variograma)
+
+        # Saved semivariograms table (one row per target variable). Column 0 is a
+        # checkbox used to mark variables for batch kriging; columns 1..11 hold the
+        # saved parameters. Reloaded from 0_Semivariograms_<layer>.csv.
+        semiv_group = QGroupBox(self.tr('Semivariogramas Salvos'))
+        semiv_layout = QVBoxLayout()
+        self.datatable_semivariogramas = QTableWidget()
+        self.datatable_semivariogramas.setMinimumHeight(150)
+        semiv_layout.addWidget(self.datatable_semivariogramas)
+        semiv_group.setLayout(semiv_layout)
+        layout.addWidget(semiv_group)
 
         self.setLayout(layout)
