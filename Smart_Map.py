@@ -53,9 +53,15 @@ from . import resources
 #from .resources import *
 
 
-#Import the code for the dialog
-from .Smart_Map_Dialog import smart_mapDialog
+#Import the code for the dialog (new pure PyQt views)
+from .views.main_dialog import SmartMapDialog
 from .Smart_Map_About  import smart_mapAbout
+
+#Import controllers
+from .controllers.data_ctrl import DataController
+from .controllers.grid_ctrl import GridController
+from .controllers.variogram_ctrl import VariogramController
+from .controllers.kriging_ctrl import KrigingController
 
 
 import os, os.path
@@ -199,16 +205,26 @@ class smart_map:
 
 
         if os.path.exists(locale_path):
- 
+
             self.translator = QTranslator()
-            self.translator.load(locale_path)              
+            self.translator.load(locale_path)
             QCoreApplication.installTranslator(self.translator)
 
+        # Get path absolute
+        self.path_absolute = QgsProject.instance().readPath("./")
 
-                             
+        # Icon path (will be set in initGui)
+        self.icon_path = ':/plugins/Smart_Map/icon.png'
+
         # Create the dialog (after translation) and keep reference
-        self.dlg = smart_mapDialog()
-                
+        self.dlg = SmartMapDialog(self.iface, self.plugin_dir, self.icon_path, self.tr)
+
+        # Initialize controllers
+        self.data_ctrl = None
+        self.grid_ctrl = None
+        self.variogram_ctrl = None
+        self.kriging_ctrl = None
+
         # Declare instance attributes
         self.actions = []
         self.menu = self.tr(u'&Smart-Map')
@@ -217,8 +233,8 @@ class smart_map:
         self.toolbar = self.iface.addToolBar(u'Smart-Map')
         self.toolbar.setObjectName(u'Smart-Map')
 
-        # Check if plugin was started the first time in current QGIS session  
-        # Must be set in run() to survive plugin reloads  
+        # Check if plugin was started the first time in current QGIS session
+        # Must be set in run() to survive plugin reloads
         self.first_start = True
         self.Index_LayerAtual  = -1         #Index_LayerCurrent starts with a negative value -> was not defined at the beginning of the program
 
@@ -380,7 +396,53 @@ class smart_map:
 
         # remove the toolbar
         del self.toolbar
-              
+
+    def _initialize_controllers(self):
+        """Initialize and wire controllers to views."""
+        data_view = self.dlg.get_data_view()
+
+        # Data controller
+        self.data_ctrl = DataController(
+            data_view, self.iface, self.plugin_dir, self.path_absolute,
+            self.icon_path, self.language, self.tr
+        )
+
+        # Grid controller
+        self.grid_ctrl = GridController(
+            data_view, self.data_ctrl, self.icon_path, self.path_absolute, self.tr
+        )
+
+        # Variogram controller
+        self.variogram_ctrl = VariogramController(
+            data_view, self.data_ctrl, self.icon_path, self.path_absolute, self.tr
+        )
+
+        # Kriging controller
+        self.kriging_ctrl = KrigingController(
+            data_view, self.data_ctrl, self.variogram_ctrl,
+            self.data_ctrl, self.icon_path, self.path_absolute, self.tr
+        )
+
+        # Wire view signals to controller slots
+        data_view.import_clicked.connect(self.data_ctrl.on_import_qgis_clicked)
+        data_view.layer_changed.connect(self.data_ctrl.on_layer_combo_changed)
+
+        data_view.pushButton_File_Save.clicked.connect(self.data_ctrl.on_file_save_clicked)
+        data_view.checkBox_Eliminate_Outilier.clicked.connect(lambda: None)  # Handled in import
+
+        data_view.SpinBox_Pixel_Size_X.valueChanged.connect(self.grid_ctrl.on_pixel_size_x_changed)
+        data_view.SpinBox_Pixel_Size_Y.valueChanged.connect(self.grid_ctrl.on_pixel_size_y_changed)
+
+        data_view.lineEdit_XMin.editingFinished.connect(self.grid_ctrl.on_x_min_edited)
+        data_view.lineEdit_XMax.editingFinished.connect(self.grid_ctrl.on_x_max_edited)
+        data_view.lineEdit_YMin.editingFinished.connect(self.grid_ctrl.on_y_min_edited)
+        data_view.lineEdit_YMax.editingFinished.connect(self.grid_ctrl.on_y_max_edited)
+
+        data_view.checkBox_Area_Contorno.toggled.connect(self.grid_ctrl.on_area_contour_toggled)
+        data_view.mMapLayerComboBox_AreaCont.currentIndexChanged.connect(
+            self.grid_ctrl.on_contour_layer_combo_changed
+        )
+        data_view.pushButton_Area_Contorno.clicked.connect(self.grid_ctrl.on_contour_apply_clicked)
 
     def run(self):
         """Run method that performs all the real work"""
@@ -404,15 +466,16 @@ class smart_map:
             msg_box.setText(self.tr('Não existe nenhum projeto QGIS aberto. Abra um projeto QGIS.') + '\n' + self.tr('Ou save o projeto atual antes de executar o plugin Smart-Map.'))
             msg_box.exec_()
 
-        else: 
-        
-            
-            if self.first_start == False:  #plugin sendo executado pela segunda vez    
-               self.dlg = smart_mapDialog()
-    
-    
-            if self.first_start == True:   #plugin running second time 
-               self.first_start = False  
+        else:
+
+            if self.first_start == False:  #plugin being executed second time
+               self.dlg = SmartMapDialog(self.iface, self.plugin_dir, self.icon_path, self.tr)
+
+            if self.first_start == True:   #plugin running first time
+               self.first_start = False
+
+            # Initialize controllers
+            self._initialize_controllers()  
             
     
             # initialize plugin directory
