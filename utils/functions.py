@@ -309,9 +309,9 @@ def calculate_statistics(labels_CV, labels):
     #Curtose = kurtosis(labels_CV) 
   
     
-    #R2_calc = (1-(SQRes/SQTot))                                #R2_calc = R2_lib 
+    R2_calc = (1-(SQRes/SQTot))                                #R2_calc = R2_lib 
     #R2_lib = r2_score(labels, labels_CV)
-  
+    #print('R2_calc ' , R2_calc)  
     
            
     #convertendo o array 1d em array 2d, para realizar regressão linear 
@@ -325,10 +325,17 @@ def calculate_statistics(labels_CV, labels):
 
 
     #para realizar regressão sobre os dados 
-    regressor = LinearRegression(fit_intercept=True, normalize=True, copy_X=True)
+    import sklearn
+    #print(sklearn.__version__)
+
+    if '0.24' in sklearn.__version__:  
+        regressor = LinearRegression(fit_intercept=True, copy_X=True, positive=True)      #positive is new in version 0.24 or hight
+    else: 
+        regressor = LinearRegression(fit_intercept=True, copy_X=True)
+    
     
     #ajustando o modelo  
-    regressor.fit(labels_CV_2d.reshape(-1,1).astype(np.float32), labels_2d.reshape(-1,1))   
+    regressor.fit(labels_CV_2d.reshape(-1,1).astype(float), labels_2d.reshape(-1,1))   
     
     #To retrieve the intercept:
     #intercept = regressor.intercept_
@@ -342,6 +349,8 @@ def calculate_statistics(labels_CV, labels):
 
     #To retrieve the R2 da regressão:
     R2_RCV = regressor.score(labels_CV_2d.reshape(-1,1), labels_2d.reshape(-1,1))  #mede o score (R2) da validação cruzada 
+    #print('R2_RCV ' , R2_RCV)  
+
 
     if den_tot > 0: 
         R2_Elp = num_tot / den_tot  
@@ -423,9 +432,9 @@ def calculate_index_moran_BV(df_orig, coord_x, coord_y, v_target):
       
     #Um erro é gerado quando, na tabela de atributos, existe campo em que o indice de Moran não pode ser calculado                                                
     #df_moran["Moran"] = pd.to_numeric(df_moran["Moran"])
-    df_moran["Moran"] = pd.to_numeric(df_moran["Moran"], errors='ignore', downcast='float')    
+    df_moran["Moran"] = pd.to_numeric(df_moran["Moran"], errors='coerce')
     #df_moran["p-value"] = pd.to_numeric(df_moran["p-value"])
-    df_moran["p-value"] = pd.to_numeric(df_moran["p-value"], errors='ignore', downcast='float')    
+    df_moran["p-value"] = pd.to_numeric(df_moran["p-value"], errors='coerce')
     
     df_moran.sort_values(['Moran'], ascending=[False], inplace=True) 
   

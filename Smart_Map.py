@@ -36,7 +36,8 @@ from qgis.core import QgsVectorLayer         #Create  VetorLayer   (.shp)
 from qgis.core import QgsCoordinateReferenceSystem, QgsFields, QgsPointXY, QgsGeometry, QgsField, QgsWkbTypes, QgsFeature
 from qgis.core import QgsMapLayerProxyModel, QgsMapLayerType, QgsLayerTreeLayer, QgsRasterLayer #Register VectorLayer no Qgis 
 from qgis.core import QgsColorRampShader, QgsSingleBandPseudoColorRenderer, QgsRasterBandStats, QgsRasterShader, QgsStyle
-#from qgis import processing
+
+import qgis.utils                            #check qgis version  
 
 import processing
 from processing.core.Processing import Processing
@@ -84,13 +85,14 @@ from scipy import spatial                                  #to calculate IDW com
 
 
 #import the code for the Utilities 
-from .utils import install_deps                            #Install deps on QGIS: pandas, sklearn, skfuzzy, pysal 
+from .utils import install_deps                            #Install deps on QGIS: sklearn, skfuzzy, pysal 
 
 import numpy as np
 import pandas as pd 
 #import sklearn 
 
 from .utils import functions                               #Utility functions -> file functions.py 
+
 
 
 
@@ -227,8 +229,12 @@ class smart_map:
         close = QMessageBox.question(self.dlg, self.tr('Mensagem'), self.tr('Deseja realmente sair?'), QMessageBox.Yes | QMessageBox.No)
 
         if close == QMessageBox.Yes:
+            
+            try: 
+                self.dlg.mMapLayerComboBox.currentIndexChanged.disconnect()    #desconecta event of combobox select Layer Qgis in Atributte Table
+            except TypeError:
+                pass  # Ignore the error if no connections exist               
 
-            self.dlg.mMapLayerComboBox.currentIndexChanged.disconnect()    #disconnect event of combobox select Layer Qgis in Atributte Table
           
            
             if self.language == 'Portuguese': #Plugin is configurated to Portuguese 
@@ -399,6 +405,7 @@ class smart_map:
             msg_box.exec_()
 
         else: 
+        
             
             if self.first_start == False:  #plugin sendo executado pela segunda vez    
                self.dlg = smart_mapDialog()
@@ -482,6 +489,12 @@ class smart_map:
             self.dlg.mMapLayerComboBox.currentIndexChanged.connect(self.mMapLayerComboBox_changed)
             self.dlg.pushButton_ImportQGIS.clicked.connect(self.pushButton_ImportQGIS_clicked)                          
             self.dlg.label_CRS_Layer.hide() 
+            
+            self.dlg.checkBox_Qgis_Raster.clicked.connect(self.checkBox_Qgis_Raster_clicked)  
+            self.dlg.checkBox_Krigagem_Std_Desv.clicked.connect(self.checkBox_Krigagem_Std_Desv_clicked)                        
+            self.dlg.checkBox_Qgis_Vector_Points.clicked.connect(self.checkBox_Qgis_Vector_Points_clicked)                        
+            self.dlg.checkBox_Qgis_Vector_Polygons.clicked.connect(self.checkBox_Qgis_Vector_Polygons_clicked)                        
+
 
 
 			###################################################################
@@ -550,6 +563,7 @@ class smart_map:
 
             self.dlg.checkBox_Krigagem_Alcance.clicked.connect(self.checkBox_Krigagem_Alcance_clicked)                  
     
+
             self.dlg.comboBox_Modelo.currentIndexChanged.connect(self.comboBox_Modelo_changed)                          
     
     
@@ -651,7 +665,7 @@ class smart_map:
             self.VTarget_FileName = ''
             self.Index_LayerAtual  = -1                                        #Index_LayerCurrent starts with a negative value -> was not defined at the beginning of the program
             self.df_limite = pd.DataFrame(columns = ['Coord_X' , 'Coord_Y'])                    
-            self.maximum_points_plugin = 1000                                  #max samples points to plugin work 
+            self.maximum_points_plugin = 5000                                  #max samples points to plugin work 
 
             if self.dlg.mMapLayerComboBox.currentIndex() >= 0:  
 
@@ -708,19 +722,39 @@ class smart_map:
 
 			###################################################################    
             #tab Interpolation -> Kriging
-            
-            self.dlg.horizontalSlider_Nugget.valueChanged.disconnect()
+            self.hide_horizontalSlider = False                                #limite máximo do GUI horizontalslider 
+
+            self.dlg.horizontalSlider_Nugget.show()
+
+            try: 
+                self.dlg.horizontalSlider_Nugget.valueChanged.disconnect()
+            except TypeError:
+                pass  # Ignore the error if no connections exist               
+                
             self.dlg.horizontalSlider_Nugget.setValue(0)
             self.dlg.lineEdit_Nugget.setText('0.000')
             self.dlg.horizontalSlider_Nugget.valueChanged.connect(self.horizontalSlider_Nugget_valueChanged)
 
-            self.dlg.horizontalSlider_Sill.valueChanged.disconnect()
+            self.dlg.horizontalSlider_Sill.show()
+            
+            try:               
+                self.dlg.horizontalSlider_Sill.valueChanged.disconnect()
+            except TypeError:
+                pass  # Ignore the error if no connections exist               
+
+                
             self.dlg.horizontalSlider_Sill.setValue(0)
             self.dlg.lineEdit_Sill.setText('0.000')
             self.dlg.horizontalSlider_Sill.valueChanged.connect(self.horizontalSlider_Sill_valueChanged)
 
-            self.dlg.horizontalSlider_Range.valueChanged.disconnect()
-            self.dlg.horizontalSlider_Range.setValue(0.001)
+            self.dlg.horizontalSlider_Range.show()
+
+            try: 
+                self.dlg.horizontalSlider_Range.valueChanged.disconnect()
+            except TypeError:
+                pass  # Ignore the error if no connections exist               
+                
+            self.dlg.horizontalSlider_Range.setValue(0)
             self.dlg.lineEdit_Range.setText('0.001')
             self.dlg.horizontalSlider_Range.valueChanged.connect(self.horizontalSlider_Range_valueChanged)
             
@@ -738,6 +772,7 @@ class smart_map:
             self.dlg.lineEdit_OK_VBRaio.setEnabled(False)            
             self.dlg.groupBox_Krigagem.setEnabled(False)  
             self.dlg.pushButton_Krigagem.setEnabled(False)  
+            self.dlg.checkBox_Krigagem_Std_Desv.setEnabled(False) 
     
             self.dlg.datatable_pontos_interpolados_OK.setColumnCount(0)
             self.dlg.datatable_pontos_interpolados_OK.setRowCount(0)
@@ -839,7 +874,7 @@ class smart_map:
             self.ImportQGIS = False             #Empty Attribute Table 
     
             self.Var_Selected = False           #Not selected Variable V_target  
-                
+            
             self.list_index_outlier = []        #List of index to Outliers 
 
             self.list_index_out_polygon = []    #List of index to Point out polygon contourn
@@ -874,9 +909,11 @@ class smart_map:
 
             self.list_cov_ZM_metodo = []        #List of Variables to generate  management zones -> method (Krig, SVM) for each variable added
                          
-
+            self.hide_horizontalSlider = False  #Hide the horizontal silder bar 
 
 ############################################################    Data import tab #################################################################
+
+
 
     def label_About_clicked(self, value):
 
@@ -917,7 +954,41 @@ class smart_map:
         f.close()             
         self.language = 'English'
         
+
+    def checkBox_Qgis_Vector_Points_clicked(self):
         
+        
+       if self.dlg.checkBox_Qgis_Vector_Points.isChecked(): 
+           
+          self.dlg.checkBox_Qgis_Raster.setChecked(True)  
+
+
+    def checkBox_Qgis_Vector_Polygons_clicked(self):
+
+
+       if self.dlg.checkBox_Qgis_Vector_Polygons.isChecked(): 
+            
+          self.dlg.checkBox_Qgis_Raster.setChecked(True)  
+
+
+    def checkBox_Qgis_Raster_clicked(self):
+
+       if not self.dlg.checkBox_Qgis_Raster.isChecked(): 
+
+          self.dlg.checkBox_Qgis_Vector_Points.setChecked(False)
+          
+          self.dlg.checkBox_Qgis_Vector_Polygons.setChecked(False)
+
+
+    def checkBox_Krigagem_Std_Desv_clicked(self):
+
+
+       if self.dlg.checkBox_Krigagem_Std_Desv.isChecked(): 
+            
+          self.dlg.checkBox_Qgis_Raster.setChecked(True)  
+
+
+
  
     def mMapLayerComboBox_changed(self):                                       #evento onchange do combobox Layer da Tabela de Atributos   
 
@@ -937,13 +1008,27 @@ class smart_map:
 
 
             selectedLayer = self.dlg.mMapLayerComboBox.currentLayer()
+            
+            coordenate_reference = selectedLayer.crs().description()
+            
+            if 'SAD69' in coordenate_reference: 
+                
+                self.lyrCRS_table_atribute = QgsProject.instance().crs().authid()  #get CRS of project   EX: EPSG:32723
+            
+            else:      
 
-            self.lyrCRS_table_atribute = selectedLayer.crs().authid()          #EPSG:32723  
+                self.lyrCRS_table_atribute = selectedLayer.crs().authid()          #EPSG:32723  
+           
 
             self.dlg.label_CRS_Layer.show() 
             self.dlg.label_CRS_Layer.setText('CRS Layer: ' + self.lyrCRS_table_atribute) 
-
+            #print(self.lyrCRS_table_atribute)
+            
+            #try: 
             #self.dlg.comboBox_VTarget.currentIndexChanged.disconnect()                           #evento onchange do combobox v_target   
+            #except TypeError:
+            #    pass  # Ignore the error if no connections exist               
+
         
             self.cols_table_atribute = selectedLayer.fields().names() 
 
@@ -1023,7 +1108,7 @@ class smart_map:
         gridy = np.arange(Cord_Y_min, Cord_Y_max, grid_size)        
                
         nr_points = len(gridx) * len(gridy)
-        print(nr_points) 
+        #print(nr_points) 
 
         '''
         while (nr_points > self.maximum_points_plugin): 
@@ -1053,7 +1138,7 @@ class smart_map:
                     
             lista_cut_xy = []
 
-            polygono = np.array(self.df_limite, dtype=np.float)                #define the polygon = area of boundary
+            polygono = np.array(self.df_limite, dtype=float)                #define the polygon = area of boundary
             bbPath = mplPath.Path(polygono)
 
             for i in range(len(arr_xy)):
@@ -1068,7 +1153,7 @@ class smart_map:
         
 
         features_dense = df[[Cord_X, Cord_Y]]     
-        features_dense = np.array( features_dense, dtype=np.float32 )
+        features_dense = np.array( features_dense, dtype=float )
 
 
         ####################################################################### 
@@ -1094,7 +1179,7 @@ class smart_map:
         
             vt_dense = df.iloc[:,feat]                                         #Array 1d (783,) with the values of covariavel                
                     
-            #z = np.zeros((gridx.shape[0], gridy.shape[0]), dtype=np.float32)  #matrix (121, 104) of zeros create of points of gridx e gridy
+            #z = np.zeros((gridx.shape[0], gridy.shape[0]), dtype=float)  #matrix (121, 104) of zeros create of points of gridx e gridy
                
             lista = []
             for cont in range(len(grid_xy)):                                   #cont between (1,141) for each point in features 
@@ -1587,7 +1672,10 @@ class smart_map:
                             
                             self.df.to_csv(os.path.join(self.path_absolute , '0_Dados_Resample.csv'), sep=',', index=False, encoding='utf-8')
                             
-                            self.dlg.mMapLayerComboBox.currentIndexChanged.disconnect()    #disconnecta evento do combobox select Layer Qgis na tabela de atributos 
+                            try: 
+                              self.dlg.mMapLayerComboBox.currentIndexChanged.disconnect()    #desconecta evento do combobox select Layer Qgis na tabela de atributos 
+                            except TypeError:
+                                pass  # Ignore the error if no connections exist               
                             
                             
                             Input_Table            = os.path.join(self.path_absolute , '0_Dados_Resample.csv') #set the filepath for the input CSV
@@ -1595,8 +1683,7 @@ class smart_map:
                             Output_Layer_Name      =                                   selectedLayer.name() + '_Resample'
     
     
-                            self.export_shapefile_of_points_to_qgis(Input_Table, Output_Layer_File_shp, Output_Layer_Name) 
-                            #self.export_shapefile_of_polygons_to_qgis(Input_Table, Output_Layer_File_shp, Output_Layer_Name) 
+                            self.export_shapefile_resampled_to_qgis(Input_Table, Output_Layer_File_shp, Output_Layer_Name) 
     
                             
                             self.dlg.mMapLayerComboBox.currentIndexChanged.connect(self.mMapLayerComboBox_changed) #connecta evento do combobox select Layer Qgis na tabela de atributos 
@@ -1629,7 +1716,7 @@ class smart_map:
                         df_outlier = self.df.loc[self.df.index[self.list_index_outlier]]
     
                         self.data_outlier = df_outlier[[self.Cord_X, self.Cord_Y, self.v_target]] 
-                        self.data_outlier = np.array( self.data_outlier, dtype=np.float )
+                        self.data_outlier = np.array( self.data_outlier, dtype=float )
     
                         self.df.drop(self.df.index[self.list_index_outlier], inplace=True)
                         self.df.reset_index(drop = True, inplace=True)
@@ -1643,7 +1730,7 @@ class smart_map:
                     #Calculando Max e Min para o mapa de contorno  
         
                     self.data = self.df[[self.Cord_X, self.Cord_Y, self.v_target]] 
-                    self.data = np.array( self.data, dtype=np.float )
+                    self.data = np.array( self.data, dtype=float )
         
                     self.Pixel_Size_X = self.dlg.SpinBox_Pixel_Size_X.value() 
         
@@ -1662,8 +1749,8 @@ class smart_map:
                     self.dlg.lineEdit_YMax.setText('%.3f' % self.Cord_Y_max)                        
         
         			   
-                    self.Num_Points_X = int((float(self.Cord_X_max) - float(self.Cord_X_min)) / int(self.Pixel_Size_X))         
-                    self.Num_Points_Y = int((float(self.Cord_Y_max) - float(self.Cord_Y_min)) / int(self.Pixel_Size_Y))         
+                    self.Num_Points_X = int((float(self.Cord_X_max) - float(self.Cord_X_min)) / float(self.Pixel_Size_X))         
+                    self.Num_Points_Y = int((float(self.Cord_Y_max) - float(self.Cord_Y_min)) / float(self.Pixel_Size_Y))         
         
         
                     self.dlg.lineEdit_Num_Points_X.setText(str(self.Num_Points_X)) 
@@ -1707,19 +1794,27 @@ class smart_map:
                     plt1.xticks(xmarks)
         
     
-                    interval_y = int((self.Cord_Y_max-self.Cord_Y_min)/7)               
+                    interval_y = int((self.Cord_Y_max-self.Cord_Y_min)/7)      
+
+                    
+                    if interval_y == 0:
+                        interval_y = 1 #int((self.Cord_Y_max-self.Cord_Y_min))  
+
+            
                     ymarks=[i for i in range(int(self.Cord_Y_min),int(self.Cord_Y_max) , interval_y)]          
                     plt1.yticks(ymarks)
         
-                    #plt1.scatter(self.data[:,0], self.data[:,1])
-                    plt1.scatter(self.data[:,0], self.data[:,1], c=self.data[:,2], cmap='RdYlGn')
-        
                     if len(self.list_index_outlier) > 0: 
                        plt1.scatter(self.data_outlier[:,0], self.data_outlier[:,1], c=self.data_outlier[:,2], marker="x", cmap='RdYlGn')
+
+                    #plt1.scatter(self.data[:,0], self.data[:,1])
+                    plt1.scatter(self.data[:,0], self.data[:,1], c=self.data[:,2], cmap='RdYlGn', vmin = min(self.data[:,2]), vmax = max(self.data[:,2]))
     
     
                     clb = plt1.colorbar(aspect=20)                                     #expessura do colorbar 
+                
                     clb.ax.set_title(self.v_target)
+                    
         
                     plt1.subplots_adjust(wspace=0.6, hspace=0.6, left=0.15, right=0.95, bottom=0.1, top=0.95)
         			  
@@ -1858,7 +1953,7 @@ class smart_map:
                     #Aba Dados
                     self.dlg.label_CRS_Layer.show() 
                     self.dlg.label_CRS_Layer.setText('CRS Layer: ' + self.lyrCRS_table_atribute) 
-        
+                    #print(self.lyrCRS_table_atribute)
         
          			###############################################################
                     #Aba Parametros e Contorno  
@@ -1880,7 +1975,8 @@ class smart_map:
                     self.dlg.pushButton_VariogramaAjust.setEnabled(True)  
                     self.dlg.pushButton_VariogramaSave.setEnabled(False)          
                     self.dlg.lineEdit_OK_DMax.setEnabled(True)
-                    self.dlg.lineEdit_OK_lags_dist.setEnabled(True)        
+                    self.dlg.lineEdit_OK_lags_dist.setEnabled(True) 
+                    
         
             
          			###############################################################
@@ -2040,6 +2136,7 @@ class smart_map:
 
         self.SpinBox_Pixel_Size_Y_changed() 
 
+
             
 
     def checkBox_Area_Contorno_clicked(self):
@@ -2079,8 +2176,8 @@ class smart_map:
                 self.dlg.lineEdit_YMin.setText('%.3f' % self.Cord_Y_min)                            
                 self.dlg.lineEdit_YMax.setText('%.3f' % self.Cord_Y_max)                        
    
-                self.Num_Points_X = int((float(self.Cord_X_max) - float(self.Cord_X_min)) / int(self.Pixel_Size_X))         
-                self.Num_Points_Y = int((float(self.Cord_Y_max) - float(self.Cord_Y_min)) / int(self.Pixel_Size_Y))         
+                self.Num_Points_X = int((float(self.Cord_X_max) - float(self.Cord_X_min)) / float(self.Pixel_Size_X))         
+                self.Num_Points_Y = int((float(self.Cord_Y_max) - float(self.Cord_Y_min)) / float(self.Pixel_Size_Y))         
 
                 self.dlg.lineEdit_Num_Points_X.setText(str(self.Num_Points_X)) 
                 self.dlg.lineEdit_Num_Points_Y.setText(str(self.Num_Points_Y)) 
@@ -2116,11 +2213,11 @@ class smart_map:
                 plt1.yticks(ymarks)
 
     
-                #plt1.scatter(self.data[:,0], self.data[:,1])
-                plt1.scatter(self.data[:,0], self.data[:,1], c=self.data[:,2], cmap='RdYlGn')
-    
                 if len(self.list_index_outlier) > 0: 
                    plt1.scatter(self.data_outlier[:,0], self.data_outlier[:,1], c=self.data_outlier[:,2], marker="x", cmap='RdYlGn')
+
+                #plt1.scatter(self.data[:,0], self.data[:,1])
+                plt1.scatter(self.data[:,0], self.data[:,1], c=self.data[:,2], cmap='RdYlGn', vmin = min(self.data[:,2]), vmax = max(self.data[:,2]))
 
 
                 clb = plt1.colorbar(aspect=20)                                 #expessura do colorbar 
@@ -2171,7 +2268,17 @@ class smart_map:
             
         selectedLayer = self.dlg.mMapLayerComboBox_AreaCont.currentLayer()     
 
-        lyrCRS = selectedLayer.crs().authid() 
+
+        coordenate_reference = selectedLayer.crs().description()
+        
+        if 'SAD69' in coordenate_reference: 
+            
+            lyrCRS = QgsProject.instance().crs().authid()  #get CRS of project   EX: EPSG:32723
+        
+        else:      
+
+            lyrCRS = selectedLayer.crs().authid() 
+
 
         if (lyrCRS != self.lyrCRS_table_atribute):  
 
@@ -2286,7 +2393,7 @@ class smart_map:
                 self.df_limite = pd.concat([self.df_limite, self.df_limite.iloc[[0]]], ignore_index=True, axis = 0)  #concantena depois da ultima linha a primeira linha para fechar a area de contorno
                 
                 
-                self.data_limite = np.array( self.df_limite, dtype=np.float )       
+                self.data_limite = np.array( self.df_limite, dtype=float )       
                 
                 self.dlg.datatable_limite.setColumnCount(len(self.df_limite.columns))
                 self.dlg.datatable_limite.setRowCount(len(self.df_limite.index))
@@ -2365,7 +2472,7 @@ class smart_map:
             
     
     
-                polygono = np.array(self.df_limite, dtype=np.float)                #define o polygono = area de contorno 
+                polygono = np.array(self.df_limite, dtype=float)                #define o polygono = area de contorno 
                 bbPath = mplPath.Path(polygono)
     
                 #drop points out of polygon 
@@ -2401,7 +2508,7 @@ class smart_map:
             
                 #plotar mapa de pontos e Area Limite     
                 self.data = self.df[[self.Cord_X, self.Cord_Y, self.v_target]] 
-                self.data = np.array( self.data, dtype=np.float )
+                self.data = np.array( self.data, dtype=float )
     
     
         
@@ -2433,12 +2540,13 @@ class smart_map:
         
         
                 plt1.plot(self.data_limite[:,0], self.data_limite[:,1])
-                #plt1.scatter(self.data[:,0], self.data[:,1])
-                plt1.scatter(self.data[:,0], self.data[:,1], c=self.data[:,2], cmap='RdYlGn')
     
                 if len(self.list_index_outlier) > 0: 
                    plt1.scatter(self.data_outlier[:,0], self.data_outlier[:,1], c=self.data_outlier[:,2], marker="x", cmap='RdYlGn')
     
+                #plt1.scatter(self.data[:,0], self.data[:,1])
+                plt1.scatter(self.data[:,0], self.data[:,1], c=self.data[:,2], cmap='RdYlGn', vmin = min(self.data[:,2]), vmax = max(self.data[:,2]))
+
                 clb = plt1.colorbar(aspect=20)                                     #expessura do colorbar 
                 clb.ax.set_title(self.v_target)
     
@@ -2654,8 +2762,11 @@ class smart_map:
 
 
                 #evento onchange do combobox Modelo Variogram
-                self.dlg.comboBox_Modelo.currentIndexChanged.disconnect()                                 
-
+                try: 
+                    self.dlg.comboBox_Modelo.currentIndexChanged.disconnect()                                 
+                except TypeError:
+                    pass  # Ignore the error if no connections exist               
+                    
 
                 if (Modelo == 'Linear') or (Modelo == 'Linear'):
                    self.dlg.comboBox_Modelo.setCurrentIndex(0)
@@ -2679,39 +2790,58 @@ class smart_map:
 
 
                 #Nugget 
-                self.dlg.horizontalSlider_Nugget.valueChanged.disconnect()
+                if self.hide_horizontalSlider == False: 
 
-                self.dlg.horizontalSlider_Nugget.setMinimum(self.C0_Minimum*1000)                    #último valor de gamma (eixo y)       
-                self.dlg.horizontalSlider_Nugget.setMaximum(self.C0_Maximum*1000)                    #último valor de gamma (eixo y)       
-                self.dlg.horizontalSlider_Nugget.setValue(C0*1000)
+                    try: 
+                       self.dlg.horizontalSlider_Nugget.valueChanged.disconnect()
+                    except TypeError:
+                        pass  # Ignore the error if no connections exist               
+                       
+    
+                    self.dlg.horizontalSlider_Nugget.setMinimum(int(self.C0_Minimum*1000))                    #último valor de gamma (eixo y)       
+                    self.dlg.horizontalSlider_Nugget.setMaximum(int(self.C0_Maximum*1000))                    #último valor de gamma (eixo y)       
+                    self.dlg.horizontalSlider_Nugget.setValue(int(C0*1000))
+            
+                    self.dlg.horizontalSlider_Nugget.valueChanged.connect(self.horizontalSlider_Nugget_valueChanged)
 
                 self.dlg.lineEdit_Nugget.setText('%.3f' % C0)                                        #último valor de gamma (eixo y)       
-        
-                self.dlg.horizontalSlider_Nugget.valueChanged.connect(self.horizontalSlider_Nugget_valueChanged)
 
 
                 #Sill
-                self.dlg.horizontalSlider_Sill.valueChanged.disconnect()
-        
-                self.dlg.horizontalSlider_Sill.setMinimum(self.C0_C_Minimum*1000)                    #último valor de gamma (eixo y)
-                self.dlg.horizontalSlider_Sill.setMaximum(self.C0_C_Maximum*1000)                    #último valor de gamma (eixo y)         
-                self.dlg.horizontalSlider_Sill.setValue(C0_C*1000)                                   #Patamar           (Co + C)           
+                if self.hide_horizontalSlider == False: 
+
+                    try: 
+                        self.dlg.horizontalSlider_Sill.valueChanged.disconnect()
+                    except TypeError:
+                        pass  # Ignore the error if no connections exist               
+                        
+            
+                    self.dlg.horizontalSlider_Sill.setMinimum(int(self.C0_C_Minimum*1000))                    #último valor de gamma (eixo y)
+                    self.dlg.horizontalSlider_Sill.setMaximum(int(self.C0_C_Maximum*1000))                    #último valor de gamma (eixo y)         
+                    self.dlg.horizontalSlider_Sill.setValue(int(C0_C*1000))                                   #Patamar           (Co + C)           
+           
+                    self.dlg.horizontalSlider_Sill.valueChanged.connect(self.horizontalSlider_Sill_valueChanged)
 
                 self.dlg.lineEdit_Sill.setText('%.3f' % C0_C) 
-        
-                self.dlg.horizontalSlider_Sill.valueChanged.connect(self.horizontalSlider_Sill_valueChanged)
-
 
                 #Range 
-                self.dlg.horizontalSlider_Range.valueChanged.disconnect()
-                
-                self.dlg.horizontalSlider_Range.setMinimum(self.Range_Minimum*1000)                  #maxima distancia entre os pontos   
-                self.dlg.horizontalSlider_Range.setMaximum(self.Range_Maximum*1000)                  #maxima distancia entre os pontos   
-                self.dlg.horizontalSlider_Range.setValue(Range*1000)
-                
+                if self.hide_horizontalSlider == False: 
+
+                    try: 
+                        self.dlg.horizontalSlider_Range.valueChanged.disconnect()
+                    except TypeError:
+                        pass  # Ignore the error if no connections exist               
+                        
+                    
+                    self.dlg.horizontalSlider_Range.setMinimum(int(self.Range_Minimum*1000))                  #maxima distancia entre os pontos   
+                    self.dlg.horizontalSlider_Range.setMaximum(int(self.Range_Maximum*1000))                  #maxima distancia entre os pontos   
+                    self.dlg.horizontalSlider_Range.setValue(int(Range*1000))
+                    
+                    self.dlg.horizontalSlider_Range.valueChanged.connect(self.horizontalSlider_Range_valueChanged)
+
+
                 self.dlg.lineEdit_Range.setText('%.3f' % Range)                                      #alcance  efetivo  (A)       
-                
-                self.dlg.horizontalSlider_Range.valueChanged.connect(self.horizontalSlider_Range_valueChanged)
+
 
 
                 self.dlg.lineEdit_OK_VBRaio.setText('%.3f' % Raio)     
@@ -2733,7 +2863,7 @@ class smart_map:
     
                 self.dlg.tabWidget_Interpolacao_OK.setCurrentIndex(0) 
 
-                self.Variogram = True
+                self.Variogram = True  
 
 
 
@@ -2754,14 +2884,14 @@ class smart_map:
         DMax_Maximum  = self.max_dist
         DMax_Minimum  = self.min_dist
 
-        C0_Maximum    = self.dlg.horizontalSlider_Nugget.maximum()/1000.0
-        C0_Minimum    = self.dlg.horizontalSlider_Nugget.minimum()/1000.0
+        C0_Maximum    = self.C0_Maximum    #self.dlg.horizontalSlider_Nugget.maximum()/1000.0
+        C0_Minimum    = self.C0_Minimum    #self.dlg.horizontalSlider_Nugget.minimum()/1000.0
 
-        C0_C_Maximum  = self.dlg.horizontalSlider_Sill.maximum()/1000.0
-        C0_C_Minimum  = self.dlg.horizontalSlider_Sill.minimum()/1000.0
+        C0_C_Maximum  = self.C0_C_Maximum  #self.dlg.horizontalSlider_Sill.maximum()/1000.0
+        C0_C_Minimum  = self.C0_C_Minimum  #self.dlg.horizontalSlider_Sill.minimum()/1000.0
 
-        Range_Maximum = self.dlg.horizontalSlider_Range.maximum()/1000.0
-        Range_Minimum = self.dlg.horizontalSlider_Range.minimum()/1000.0
+        Range_Maximum = self.Range_Maximum #self.dlg.horizontalSlider_Range.maximum()/1000.0
+        Range_Minimum = self.Range_Minimum #self.dlg.horizontalSlider_Range.minimum()/1000.0
 
         Raio_Maximum  = self.Raio_OK_Maximum
         Raio_Minimum  = self.Raio_OK_Minimum
@@ -2832,7 +2962,11 @@ class smart_map:
         
 
         #evento onchange do combobox Modelo Variogram
-        self.dlg.comboBox_Modelo.currentIndexChanged.disconnect()                                 
+        try: 
+            self.dlg.comboBox_Modelo.currentIndexChanged.disconnect()                                 
+        except TypeError:
+            pass  # Ignore the error if no connections exist               
+
        
         
         #groupbox variograma experimental
@@ -2928,8 +3062,9 @@ class smart_map:
             Range  = self.models[self.model][1]
             Sill   = self.models[self.model][2]
             Rss    = self.models[self.model][3]
-            R2     = self.models[self.model][4]                   
-
+            R2     = self.models[self.model][4]  
+                 
+            #print(Nugget, Sill, Range, Rss, R2)
 
 
         #######################################################################
@@ -3033,29 +3168,71 @@ class smart_map:
                 self.dlg.lineEdit_Var_R2.setText('+inf')               
 
 
+
+             #Nugget                                                   #Range                                    #Sill
+        if (((self.gamma[len(self.gamma)-1])*1000) >  2147483647) or ((Semiv.max_dist*1000) >  2147483647) or ((((self.gamma[len(self.gamma)-1])*3)*1000) >  2147483647): 
+            self.hide_horizontalSlider = True 
+        else: 
+            self.hide_horizontalSlider = False 
+            
+
+
         #Nugget 
-        self.dlg.horizontalSlider_Nugget.valueChanged.disconnect()
+        if self.hide_horizontalSlider == True:                                      #limite máximo do GUI horizontalslider 
 
-        self.dlg.horizontalSlider_Nugget.setMaximum((self.gamma[len(self.gamma)-1])*1000)           #último valor de gamma (eixo y)       
-        self.C0_Maximum = self.gamma[len(self.gamma)-1]                                             #último valor de gamma (eixo y)       
-        self.C0_Minimum = 0
+            self.dlg.horizontalSlider_Nugget.hide()
 
-        self.dlg.horizontalSlider_Nugget.setValue(Nugget*1000)
-        self.dlg.lineEdit_Nugget.setText('%.3f'  % Nugget)                                          #último valor de gamma (eixo y)       
+            self.C0_Maximum = self.gamma[len(self.gamma)-1]                                         #último valor de gamma (eixo y)       
+            self.C0_Minimum = 0
+            self.dlg.lineEdit_Nugget.setText('%.3f'  % Nugget)                                      #último valor de gamma (eixo y)       
 
-        self.dlg.horizontalSlider_Nugget.valueChanged.connect(self.horizontalSlider_Nugget_valueChanged)
+
+        else:     
+
+            self.dlg.horizontalSlider_Nugget.show()
+            
+            try: 
+                self.dlg.horizontalSlider_Nugget.valueChanged.disconnect()
+            except TypeError:
+                pass  # Ignore the error if no connections exist               
+                
+
+            self.dlg.horizontalSlider_Nugget.setMaximum(int((self.gamma[len(self.gamma)-1])*1000))       #último valor de gamma (eixo y)       
+            self.C0_Maximum = self.gamma[len(self.gamma)-1]                                         #último valor de gamma (eixo y)       
+            self.C0_Minimum = 0
+            self.dlg.horizontalSlider_Nugget.setValue(int(Nugget*1000))      
+            self.dlg.lineEdit_Nugget.setText('%.3f'  % Nugget)                                      #último valor de gamma (eixo y)       
+
+            self.dlg.horizontalSlider_Nugget.valueChanged.connect(self.horizontalSlider_Nugget_valueChanged)
 
 
         #Range 
-        self.dlg.horizontalSlider_Range.valueChanged.disconnect()
+        if self.hide_horizontalSlider == True:                                      #limite máximo do GUI horizontalslider 
 
-        self.dlg.horizontalSlider_Range.setMaximum(Semiv.max_dist*1000)                             #maxima distancia entre os pontos   
-        self.Range_Maximum = Semiv.max_dist                                                         #último valor de gamma (eixo y)       
-        self.Range_Minimum = 0.001
+            self.dlg.horizontalSlider_Range.hide()
 
-        self.dlg.horizontalSlider_Range.setValue(Range*1000)
-        self.dlg.lineEdit_Range.setText('%.3f'  % Range)                                            #último valor de gamma (eixo y)       
+            self.Range_Maximum = Semiv.max_dist                                                         #último valor de gamma (eixo y)       
+            self.Range_Minimum = 0.001
+            self.dlg.lineEdit_Range.setText('%.3f'  % Range)                                            #último valor de gamma (eixo y)       
 
+        else:     
+
+            self.dlg.horizontalSlider_Range.show()
+
+            try: 
+                self.dlg.horizontalSlider_Range.valueChanged.disconnect()
+            except TypeError:
+                pass  # Ignore the error if no connections exist               
+               
+   
+            self.dlg.horizontalSlider_Range.setMaximum(int(Semiv.max_dist*1000))                             #maxima distancia entre os pontos   
+            self.Range_Maximum = Semiv.max_dist                                                         #último valor de gamma (eixo y)       
+            self.Range_Minimum = 0.001
+    
+            self.dlg.horizontalSlider_Range.setValue(int(Range*1000))
+            self.dlg.lineEdit_Range.setText('%.3f'  % Range)                                            #último valor de gamma (eixo y)       
+
+            self.dlg.horizontalSlider_Range.valueChanged.connect(self.horizontalSlider_Range_valueChanged)
 
         #Raio de Busca 
         if self.dlg.checkBox_Krigagem_Alcance.isChecked(): 
@@ -3063,20 +3240,33 @@ class smart_map:
             self.dlg.lineEdit_OK_VBRaio.setText('%.3f' % Raio)                     
 
 
-        self.dlg.horizontalSlider_Range.valueChanged.connect(self.horizontalSlider_Range_valueChanged)
-
         #Sill
-        self.dlg.horizontalSlider_Sill.valueChanged.disconnect()
+        if self.hide_horizontalSlider == True:                                      #limite máximo do GUI horizontalslider 
 
+            self.dlg.horizontalSlider_Sill.hide()
 
-        self.dlg.horizontalSlider_Sill.setMaximum(((self.gamma[len(self.gamma)-1])*3)*1000)         #último valor de gamma (eixo y)         
-        self.C0_C_Maximum = (self.gamma[len(self.gamma)-1])*3                                       #último valor de gamma (eixo y)       
-        self.C0_C_Minimum = 0 
+            self.C0_C_Maximum = (self.gamma[len(self.gamma)-1])*3                                       #último valor de gamma (eixo y)       
+            self.C0_C_Minimum = 0 
+            self.dlg.lineEdit_Sill.setText('%.3f'  % Sill)  
 
-        self.dlg.horizontalSlider_Sill.setValue(Sill*1000)
-        self.dlg.lineEdit_Sill.setText('%.3f'  % Sill)  
+        else:     
 
-        self.dlg.horizontalSlider_Sill.valueChanged.connect(self.horizontalSlider_Sill_valueChanged)
+            self.dlg.horizontalSlider_Sill.show()
+
+            try: 
+                self.dlg.horizontalSlider_Sill.valueChanged.disconnect()
+            except TypeError:
+                pass  # Ignore the error if no connections exist               
+    
+    
+            self.dlg.horizontalSlider_Sill.setMaximum(int(((self.gamma[len(self.gamma)-1])*3)*1000))         #último valor de gamma (eixo y)         
+            self.C0_C_Maximum = (self.gamma[len(self.gamma)-1])*3                                       #último valor de gamma (eixo y)       
+            self.C0_C_Minimum = 0 
+    
+            self.dlg.horizontalSlider_Sill.setValue(int(Sill*1000))
+            self.dlg.lineEdit_Sill.setText('%.3f'  % Sill)  
+    
+            self.dlg.horizontalSlider_Sill.valueChanged.connect(self.horizontalSlider_Sill_valueChanged)
 
 
         self.dlg.comboBox_Modelo.currentIndexChanged.connect(self.comboBox_Modelo_changed)      #evento onchange do combobox Modelo Variogram  
@@ -3151,6 +3341,7 @@ class smart_map:
         self.dlg.lineEdit_OK_VBRaio.setEnabled(True)
         self.dlg.checkBox_Krigagem_Alcance.setEnabled(True)
         self.dlg.pushButton_Krigagem.setEnabled(True)
+        self.dlg.checkBox_Krigagem_Std_Desv.setEnabled(True) 
         
 
         self.dlg.label_Krigagem.hide()           
@@ -3243,11 +3434,17 @@ class smart_map:
         self.dlg.lineEdit_Nugget.setText('%.3f' % value_Nugget)
 
 
-        self.dlg.horizontalSlider_Nugget.valueChanged.disconnect()
+        if self.hide_horizontalSlider == False:                                #limite máximo do GUI horizontalslider 
 
-        self.dlg.horizontalSlider_Nugget.setValue(value_Nugget*1000)
-
-        self.dlg.horizontalSlider_Nugget.valueChanged.connect(self.horizontalSlider_Nugget_valueChanged)
+            try: 
+                self.dlg.horizontalSlider_Nugget.valueChanged.disconnect()
+            except TypeError:
+                pass  # Ignore the error if no connections exist               
+                
+    
+            self.dlg.horizontalSlider_Nugget.setValue(int(value_Nugget*1000))
+    
+            self.dlg.horizontalSlider_Nugget.valueChanged.connect(self.horizontalSlider_Nugget_valueChanged)
 
         self.dlg.tabWidget_Interpolacao_OK.setCurrentIndex(0) 
 
@@ -3287,11 +3484,19 @@ class smart_map:
 
         self.dlg.lineEdit_Sill.setText('%.3f' % value_Sill)
 
-        self.dlg.horizontalSlider_Sill.valueChanged.disconnect()
 
-        self.dlg.horizontalSlider_Sill.setValue(value_Sill*1000)
+        if self.hide_horizontalSlider == False:                                #limite máximo do GUI horizontalslider 
 
-        self.dlg.horizontalSlider_Sill.valueChanged.connect(self.horizontalSlider_Sill_valueChanged)
+            try: 
+                self.dlg.horizontalSlider_Sill.valueChanged.disconnect()
+            except TypeError:
+                pass  # Ignore the error if no connections exist               
+                
+    
+            self.dlg.horizontalSlider_Sill.setValue(int(value_Sill*1000))
+    
+            self.dlg.horizontalSlider_Sill.valueChanged.connect(self.horizontalSlider_Sill_valueChanged)
+
 
         self.dlg.tabWidget_Interpolacao_OK.setCurrentIndex(0) 
 
@@ -3331,11 +3536,18 @@ class smart_map:
 
         self.dlg.lineEdit_Range.setText('%.3f' % value_Range)
 
-        self.dlg.horizontalSlider_Range.valueChanged.disconnect()
 
-        self.dlg.horizontalSlider_Range.setValue(value_Range*1000)
+        if self.hide_horizontalSlider == False:                                #limite máximo do GUI horizontalslider 
 
-        self.dlg.horizontalSlider_Range.valueChanged.connect(self.horizontalSlider_Range_valueChanged)
+            try: 
+                self.dlg.horizontalSlider_Range.valueChanged.disconnect()
+            except TypeError:
+                pass  # Ignore the error if no connections exist               
+                
+    
+            self.dlg.horizontalSlider_Range.setValue(int(value_Range*1000))
+    
+            self.dlg.horizontalSlider_Range.valueChanged.connect(self.horizontalSlider_Range_valueChanged)
 
         self.dlg.tabWidget_Interpolacao_OK.setCurrentIndex(0) 
 
@@ -3563,11 +3775,12 @@ class smart_map:
             z_est_py, ss = OK.execute(xygrid, n_closest_points=n_neig, radius=raio_busca)        
     
 
-            z_est_py = z_est_py.reshape(-1,1)  #redimenciona para 2d array                
+            z_est_py = z_est_py.reshape(-1,1)  #redimenciona para 2d array          
+            ss       = ss.reshape(-1,1)        #redimenciona para 2d array      
                   
-            self.arr_cut = np.vstack((xygrid[:,0], xygrid[:,1],  z_est_py[:,0]))  #array [3, 7860]
+            self.arr_cut = np.vstack((xygrid[:,0], xygrid[:,1],  z_est_py[:,0], ss[:,0]))  #array [4, 7860]
 
-            self.arr_cut = self.arr_cut.T                                         #array [7860, 3]
+            self.arr_cut = self.arr_cut.T                                         #array [7860, 4]
     
             cont = cont + 1 
             progress.setValue(cont)                        
@@ -3579,9 +3792,10 @@ class smart_map:
             ###################################################################
             #preenchendo tabela com pontos interpolados  
                         
-            df_pontos_interpolados_OK = pd.DataFrame(np.atleast_2d(self.arr_cut), columns=[self.Cord_X, self.Cord_Y, self.v_target])
-            df_pontos_interpolados_OK.to_csv(os.path.join(self.path_absolute , '1_Krig_' + self.VTarget_FileName + '_Grid_Map.csv'), sep=',', index=False, encoding='utf-8')
-            df_pontos_interpolados_OK.to_csv(os.path.join(self.path_absolute , '1_Krig_' + self.VTarget_FileName + '_Grid_Map.kri'), sep=',', index=False, encoding='utf-8')
+            df_pontos_interpolados_OK = pd.DataFrame(np.atleast_2d(self.arr_cut), columns=[self.Cord_X, self.Cord_Y, self.v_target, 'SD_Values'])
+            df_pontos_interpolados_OK.to_csv(os.path.join(self.path_absolute , '1_Krig_' + self.VTarget_FileName + '_Grid_Map.csv'   ), sep=',', index=False, encoding='utf-8')
+            df_pontos_interpolados_OK.to_csv(os.path.join(self.path_absolute , '1_Krig_' + self.VTarget_FileName + '_Grid_Map_SD.csv'), sep=',', index=False, encoding='utf-8')
+            df_pontos_interpolados_OK.to_csv(os.path.join(self.path_absolute , '1_Krig_' + self.VTarget_FileName + '_Grid_Map.kri'   ), sep=',', index=False, encoding='utf-8')
 
       
             self.dlg.datatable_pontos_interpolados_OK.setColumnCount(len(df_pontos_interpolados_OK.columns))
@@ -3593,6 +3807,7 @@ class smart_map:
                 cols = [] 
                 cols = list(df_pontos_interpolados_OK.columns.values)                        
                 cols[2] = self.tr('Z.Predito')
+                cols[3] = self.tr('Desv.Pad.')
                 self.dlg.datatable_pontos_interpolados_OK.setHorizontalHeaderLabels(cols)
     
             except AttributeError: 
@@ -3645,42 +3860,16 @@ class smart_map:
     
 
             ###################################################################
-            #Exportando arquivo ShapeFile para QGIS 
-            cont = cont + 1 
-            progress.setValue(cont)                        
-            if progress.wasCanceled():                          
-               progress.close() 
-               return 
-
-
-
-            if self.dlg.checkBox_Qgis_Vector.isChecked(): 
-
-                self.dlg.mMapLayerComboBox.currentIndexChanged.disconnect()    #disconnecta evento do combobox select Layer Qgis na tabela de atributos 
-                
-                Input_Table            = os.path.join(self.path_absolute , '1_Krig_' + self.VTarget_FileName + '_Grid_Map.csv') #set the filepath for the input CSV
-                Output_Layer_File_shp  = os.path.join(self.path_absolute , '1_Krig_' + self.VTarget_FileName + '_Grid_Map.shp') #set the filepath for the output shapefile
-                Output_Layer_Name      =                                   '1_Krig_' + self.VTarget_FileName
-
-
-                self.export_shapefile_of_points_to_qgis(Input_Table, Output_Layer_File_shp, Output_Layer_Name) 
-                #self.export_shapefile_of_polygons_to_qgis(Input_Table, Output_Layer_File_shp, Output_Layer_Name) 
-
-                    
-                self.dlg.mMapLayerComboBox.currentIndexChanged.connect(self.mMapLayerComboBox_changed) #connecta evento do combobox select Layer Qgis na tabela de atributos 
-
-                
-            ###################################################################
-            #Exportando arquivo Rasterfile para QGIS 
-            cont = cont + 1 
-            progress.setValue(cont)                        
-            if progress.wasCanceled():                          
-               progress.close() 
-               return 
-
+            #Exportando arquivo Rasterfile da Kriagem para QGIS 
 
             if self.dlg.checkBox_Qgis_Raster.isChecked(): 
  
+                cont = cont + 1 
+                progress.setValue(cont)                        
+                if progress.wasCanceled():                          
+                   progress.close() 
+                   return 
+
 
                 # get the filenames
                 Input_Table            =                                   '1_Krig_' + self.VTarget_FileName + '_Grid_Map.csv'
@@ -3688,11 +3877,129 @@ class smart_map:
                 Output_Layer_Name      =                                   '1_Krig_' + self.VTarget_FileName
                 z_field   = self.v_target
 
-                self.dlg.mMapLayerComboBox.currentIndexChanged.disconnect()
+                try: 
+                    self.dlg.mMapLayerComboBox.currentIndexChanged.disconnect()
+                except TypeError:
+                    pass  # Ignore the error if no connections exist               
+                
+                Output_Layer_File_tiff = self.export_raster_to_qgis(Input_Table, Output_Layer_File_tiff, Output_Layer_Name, z_field) 
 
-                self.export_raster_to_qgis(Input_Table, Output_Layer_File_tiff, Output_Layer_Name, z_field) 
+
+
+                ###################################################################
+                #Exportando arquivo Shapefile de pontos para QGIS 
+    
+                if self.dlg.checkBox_Qgis_Vector_Points.isChecked(): 
+    
+
+                    #    marcou area de contorno                       e   definiu a layer de contorno) 
+                    if ((self.dlg.checkBox_Area_Contorno.isChecked()) and (self.dlg.mMapLayerComboBox_AreaCont.currentIndex() >= 0)): 
+
+                        cont = cont + 1 
+                        progress.setValue(cont)                        
+                        if progress.wasCanceled():                          
+                           progress.close() 
+                           return 
+        
+                        
+                        self.export_shapefile_to_qgis(Output_Layer_File_tiff, "native:pixelstopoints") 
+                        
+                    else: 
+                        self.dlg.checkBox_Qgis_Vector_Points.setChecked(False)           
+
+
+
+                ###################################################################
+                #Exportando arquivo Shapefile de poligonos para QGIS 
+    
+                if self.dlg.checkBox_Qgis_Vector_Polygons.isChecked(): 
+                    
+                    #    marcou area de contorno                       e   definiu a layer de contorno) 
+                    if ((self.dlg.checkBox_Area_Contorno.isChecked()) and (self.dlg.mMapLayerComboBox_AreaCont.currentIndex() >= 0)): 
+
+                        cont = cont + 1 
+                        progress.setValue(cont)                        
+                        if progress.wasCanceled():                          
+                           progress.close() 
+                           return 
+        
+                        
+                        self.export_shapefile_to_qgis(Output_Layer_File_tiff, "native:pixelstopolygons") 
+
+                    else: 
+                        self.dlg.checkBox_Qgis_Vector_Polygons.setChecked(False)           
+
+                
+
+            ###################################################################
+            #Exportando arquivo Rasterfile do Desvio Padrão para QGIS 
+            if self.dlg.checkBox_Krigagem_Std_Desv.isChecked(): 
+
+
+                cont = cont + 1 
+                progress.setValue(cont)                        
+                if progress.wasCanceled():                          
+                   progress.close() 
+                   return 
+
+                # get the filenames
+                Input_Table            =                                   '1_Krig_' + self.VTarget_FileName + '_Grid_Map_SD.csv'
+                Output_Layer_File_tiff = os.path.join(self.path_absolute , '1_Krig_' + self.VTarget_FileName + '_Grid_Map_SD.tiff')             
+                Output_Layer_Name      =                                   '1_Krig_' + self.VTarget_FileName + '_SD'
+                z_field   = 'SD_Values'
+
+
+                Output_Layer_File_tiff = self.export_raster_to_qgis(Input_Table, Output_Layer_File_tiff, Output_Layer_Name, z_field) 
+
+
+                ###################################################################
+                #Exportando arquivo Shapefile de pontos para QGIS 
+    
+                if self.dlg.checkBox_Qgis_Vector_Points.isChecked(): 
+    
+                    #    marcou area de contorno                       e   definiu a layer de contorno) 
+                    if ((self.dlg.checkBox_Area_Contorno.isChecked()) and (self.dlg.mMapLayerComboBox_AreaCont.currentIndex() >= 0)): 
+
+                        cont = cont + 1 
+                        progress.setValue(cont)                        
+                        if progress.wasCanceled():                          
+                           progress.close() 
+                           return 
+        
+                        
+                        self.export_shapefile_to_qgis(Output_Layer_File_tiff, "native:pixelstopoints") 
+
+                    else: 
+                        self.dlg.checkBox_Qgis_Vector_Points.setChecked(False)           
+
+
+
+                ###################################################################
+                #Exportando arquivo Shapefile de poligonos para QGIS 
+    
+                if self.dlg.checkBox_Qgis_Vector_Polygons.isChecked(): 
+                    
+                    #    marcou area de contorno                       e   definiu a layer de contorno) 
+                    if ((self.dlg.checkBox_Area_Contorno.isChecked()) and (self.dlg.mMapLayerComboBox_AreaCont.currentIndex() >= 0)): 
+
+                        cont = cont + 1 
+                        progress.setValue(cont)                        
+                        if progress.wasCanceled():                          
+                           progress.close() 
+                           return 
+        
+                        
+                        self.export_shapefile_to_qgis(Output_Layer_File_tiff, "native:pixelstopolygons") 
+
+                    else: 
+                        self.dlg.checkBox_Qgis_Vector_Polygons.setChecked(False)           
+
+
+
+            if self.dlg.checkBox_Qgis_Raster.isChecked(): 
 
                 self.dlg.mMapLayerComboBox.currentIndexChanged.connect(self.mMapLayerComboBox_changed)
+
 
 
             ###################################################################
@@ -3733,7 +4040,7 @@ class smart_map:
             plt3.yticks(ymarks)
 
 
-            plt3.scatter(self.arr_cut[:,0], self.arr_cut[:,1], c=self.arr_cut[:,2], cmap='RdYlGn') #plotar gráfico de Mapa Interpolado
+            plt3.scatter(self.arr_cut[:,0], self.arr_cut[:,1], c=self.arr_cut[:,2], cmap='RdYlGn', vmin = min(self.arr_cut[:,2]), vmax = max(self.arr_cut[:,2])) #plotar gráfico de Mapa Interpolado
 
             clb = plt3.colorbar(aspect=20)                                     #expessura do colorbar 
             clb.ax.set_title(self.v_target)
@@ -3780,7 +4087,7 @@ class smart_map:
 
         if msg == QMessageBox.Yes:
 
-            if ((not self.dlg.checkBox_Qgis_Vector.isChecked()) and (not self.dlg.checkBox_Qgis_Raster.isChecked())):  #checkbox Vector e checkbox Raster não estão marcados 
+            if ((not self.dlg.checkBox_Qgis_Vector_Points.isChecked()) and (not self.dlg.checkBox_Qgis_Raster.isChecked())):  #checkbox Vector e checkbox Raster não estão marcados 
 
                 self.dlg.checkBox_Qgis_Raster.setChecked(True)              
 
@@ -3847,7 +4154,11 @@ class smart_map:
 
     
                     #evento onchange do combobox Modelo Variogram
-                    self.dlg.comboBox_Modelo.currentIndexChanged.disconnect()                                 
+                    try: 
+                        self.dlg.comboBox_Modelo.currentIndexChanged.disconnect()                                 
+                    except TypeError:
+                        pass  # Ignore the error if no connections exist               
+                        
     
     
                     if (Modelo == 'Linear') or (Modelo == 'Linear'):
@@ -3872,40 +4183,59 @@ class smart_map:
 
     
                     #Nugget 
-                    self.dlg.horizontalSlider_Nugget.valueChanged.disconnect()
-
-                    self.dlg.horizontalSlider_Nugget.setMinimum(self.C0_Minimum*1000)                    #último valor de gamma (eixo y)       
-                    self.dlg.horizontalSlider_Nugget.setMaximum(self.C0_Maximum*1000)                    #último valor de gamma (eixo y)       
-                    self.dlg.horizontalSlider_Nugget.setValue(C0*1000)
+                    
+                    if self.hide_horizontalSlider == False: 
+                    
+                        try: 
+                            self.dlg.horizontalSlider_Nugget.valueChanged.disconnect()
+                        except TypeError:
+                            pass  # Ignore the error if no connections exist               
+                                
+                        self.dlg.horizontalSlider_Nugget.setMinimum(int(self.C0_Minimum*1000))                    #último valor de gamma (eixo y)       
+                        self.dlg.horizontalSlider_Nugget.setMaximum(int(self.C0_Maximum*1000))                    #último valor de gamma (eixo y)       
+                        self.dlg.horizontalSlider_Nugget.setValue(int(C0*1000))
+    
+                        self.dlg.horizontalSlider_Nugget.valueChanged.connect(self.horizontalSlider_Nugget_valueChanged)
 
                     self.dlg.lineEdit_Nugget.setText('%.3f'  % C0)                                       #último valor de gamma (eixo y)       
-            
-                    self.dlg.horizontalSlider_Nugget.valueChanged.connect(self.horizontalSlider_Nugget_valueChanged)
 
 
                     #Sill
-                    self.dlg.horizontalSlider_Sill.valueChanged.disconnect()
-            
-                    self.dlg.horizontalSlider_Sill.setMinimum(self.C0_C_Minimum*1000)                    #último valor de gamma (eixo y)           
-                    self.dlg.horizontalSlider_Sill.setMaximum(self.C0_C_Maximum*1000)                    #último valor de gamma (eixo y)         
-                    self.dlg.horizontalSlider_Sill.setValue(C0_C*1000)                                   #Patamar           (Co + C)           
+
+                    if self.hide_horizontalSlider == False: 
+
+                        try: 
+                            self.dlg.horizontalSlider_Sill.valueChanged.disconnect()
+                        except TypeError:
+                            pass  # Ignore the error if no connections exist               
+                            
+                
+                        self.dlg.horizontalSlider_Sill.setMinimum(int(self.C0_C_Minimum*1000))                    #último valor de gamma (eixo y)           
+                        self.dlg.horizontalSlider_Sill.setMaximum(int(self.C0_C_Maximum*1000))                    #último valor de gamma (eixo y)         
+                        self.dlg.horizontalSlider_Sill.setValue(int(C0_C*1000))                                   #Patamar           (Co + C)           
+    
+                        self.dlg.horizontalSlider_Sill.valueChanged.connect(self.horizontalSlider_Sill_valueChanged)
 
                     self.dlg.lineEdit_Sill.setText('%.3f'  % C0_C) 
-            
-                    self.dlg.horizontalSlider_Sill.valueChanged.connect(self.horizontalSlider_Sill_valueChanged)
-
 
                     #Range 
-                    self.dlg.horizontalSlider_Range.valueChanged.disconnect()
-                    
-                    self.dlg.horizontalSlider_Range.setMinimum(self.Range_Minimum*1000)                  #minima distancia entre os pontos   
-                    self.dlg.horizontalSlider_Range.setMaximum(self.Range_Maximum*1000)                  #maxima distancia entre os pontos   
-                    self.dlg.horizontalSlider_Range.setValue(Range*1000)
-                    
-                    self.dlg.lineEdit_Range.setText('%.3f'  % Range)                                     #alcance  efetivo  (A)       
-                    
-                    self.dlg.horizontalSlider_Range.valueChanged.connect(self.horizontalSlider_Range_valueChanged)
 
+                    if self.hide_horizontalSlider == False: 
+
+                        try: 
+                            self.dlg.horizontalSlider_Range.valueChanged.disconnect()
+                        except TypeError:
+                            pass  # Ignore the error if no connections exist               
+                            
+                        
+                        self.dlg.horizontalSlider_Range.setMinimum(int(self.Range_Minimum*1000))                  #minima distancia entre os pontos   
+                        self.dlg.horizontalSlider_Range.setMaximum(int(self.Range_Maximum*1000))                  #maxima distancia entre os pontos   
+                        self.dlg.horizontalSlider_Range.setValue(int(Range*1000))
+                        
+                        self.dlg.horizontalSlider_Range.valueChanged.connect(self.horizontalSlider_Range_valueChanged)
+
+
+                    self.dlg.lineEdit_Range.setText('%.3f'  % Range)                                     #alcance  efetivo  (A)       
     
                     self.dlg.lineEdit_OK_VBRaio.setText('%.3f' % Raio)     
 
@@ -3989,8 +4319,8 @@ class smart_map:
             for cont in (range(len(self.xy))):
         
                       
-                coordx = self.xy.iloc[cont][0]      #concatena o único ponto (x), que será utilizado na validação cruzada 
-                coordy = self.xy.iloc[cont][1]      #concatena o único ponto (y), que será utilizado na validação cruzada 
+                coordx = self.xy.iloc[cont, 0]      #concatena o único ponto (x), que será utilizado na validação cruzada
+                coordy = self.xy.iloc[cont, 1]      #concatena o único ponto (y), que será utilizado na validação cruzada
                
                 
                 xy2 = self.xy.drop(cont)            #deleta a linha cont do dataframe xy 
@@ -4334,7 +4664,16 @@ class smart_map:
             
                 selectedLayer = self.dlg.mMapLayerComboBox_DenseLayer.currentLayer()
     
-                lyrCRS = selectedLayer.crs().authid() 
+                coordenate_reference = selectedLayer.crs().description()
+                
+                if 'SAD69' in coordenate_reference: 
+                    
+                    lyrCRS = QgsProject.instance().crs().authid()  #get CRS of project   EX: EPSG:32723
+                
+                else:      
+
+                    lyrCRS = selectedLayer.crs().authid() 
+
         
                 if (lyrCRS != self.lyrCRS_table_atribute):  
         
@@ -4701,7 +5040,7 @@ class smart_map:
                             
                     lista_cut_xy = []
         
-                    polygono = np.array(self.df_limite, dtype=np.float)        #define o polygono = area de contorno 
+                    polygono = np.array(self.df_limite, dtype=float)        #define o polygono = area de contorno 
                     bbPath = mplPath.Path(polygono)
     
                     maximum = len(arr_xy)
@@ -5012,7 +5351,7 @@ class smart_map:
                     tree = spatial.cKDTree(gridxy)
 
                     ## ------------- Creating empty grid matrix with np.zeros                               
-                    z = np.zeros((self.gridx.shape[0], self.gridy.shape[0]), dtype=np.float32)
+                    z = np.zeros((self.gridx.shape[0], self.gridy.shape[0]), dtype=float)
     
                     cont = 1    
                     for i, val1 in enumerate(self.gridx):
@@ -5090,7 +5429,7 @@ class smart_map:
                                 self.pushButton_Area_Contorno_clicked()    
 
 
-                        polygono = np.array(self.df_limite, dtype=np.float)    #define o polygono = area de contorno
+                        polygono = np.array(self.df_limite, dtype=float)    #define o polygono = area de contorno
                         bbPath = mplPath.Path(polygono)
                         
                         cont = 1       
@@ -5158,7 +5497,7 @@ class smart_map:
                         gridy       = np.arange(coord_y_min, coord_y_max, self.Pixel_Size_Y)
 
                         if self.dlg.checkBox_Area_Contorno.isChecked(): 
-                            polygono = np.array(self.df_limite, dtype=np.float)#define o poly = area de contorno 
+                            polygono = np.array(self.df_limite, dtype=float)#define o poly = area de contorno 
                             bbPath = mplPath.Path(polygono)
     
 
@@ -5271,7 +5610,7 @@ class smart_map:
                     tree_dense = spatial.cKDTree(gridxy_dense)                               #objeto com as distâncias entre os pontos  
                     ## ------------- Creating empty grid matrix with np.zeros
                               
-                    #z = np.zeros((gridx.shape[0], gridy.shape[0]), dtype=np.float32)        #matriz (121, 104) de zeros formada pelos pontos de gridx e gridy
+                    #z = np.zeros((gridx.shape[0], gridy.shape[0]), dtype=float)             #matriz (121, 104) de zeros formada pelos pontos de gridx e gridy
            
                     lista = []
                     for cont in range(len(self.data)):                                       #cont variando entre (1,141) para cada ponto de features 
@@ -5374,7 +5713,7 @@ class smart_map:
                     tree_dense = spatial.cKDTree(gridxy_dense)
 
                     ## ------------- Creating empty grid matrix with np.zeros                               
-                    z = np.zeros((self.gridx.shape[0], self.gridy.shape[0]), dtype=np.float32)
+                    z = np.zeros((self.gridx.shape[0], self.gridy.shape[0]), dtype=float)
         
                     cont = 1    
                     for i, val1 in enumerate(self.gridx):
@@ -5449,7 +5788,7 @@ class smart_map:
         
                     if self.dlg.checkBox_Area_Contorno.isChecked(): 
         
-                        polygono = np.array(self.df_limite, dtype=np.float)    #define o polygono = area de contorno
+                        polygono = np.array(self.df_limite, dtype=float)    #define o polygono = area de contorno
                         bbPath = mplPath.Path(polygono)
                         
                         cont = 1       
@@ -5798,7 +6137,7 @@ class smart_map:
                         
                 lista_cut_xy = []
     
-                polygono = np.array(self.df_limite, dtype=np.float)        #define o polygono = area de contorno 
+                polygono = np.array(self.df_limite, dtype=float)        #define o polygono = area de contorno 
                 bbPath = mplPath.Path(polygono)
 
                 maximum = len(arr_xy)
@@ -5853,9 +6192,9 @@ class smart_map:
      
         #k_folds    =  self.dlg.spinBox_KFolds_CV.value()                  #numero de K-Folds para CV
 
-        features = np.array(self.df_SVM_Trainfeatures, dtype=np.float)
+        features = np.array(self.df_SVM_Trainfeatures, dtype=float)
      
-        labels =   np.array(self.df_SVM_Trainlabels   , dtype=np.float)
+        labels =   np.array(self.df_SVM_Trainlabels   , dtype=float)
       
      
         maximum = (len(self.grid_xy) * 3)  + 5            
@@ -6002,31 +6341,6 @@ class smart_map:
         self.dlg.datatable_pontos_interpolados_SVM.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers) #read-only para as celulas do datatable
 
 
-        ###################################################################
-        #Exportando arquivo ShapeFile 
-
-        cont = cont + 1 
-        progress.setValue(cont)                        
-        if progress.wasCanceled():                          
-           progress.close() 
-           return 
-
-
-        if self.dlg.checkBox_Qgis_Vector.isChecked(): 
-
-            self.dlg.mMapLayerComboBox.currentIndexChanged.disconnect()    #disconnecta evento do combobox select Layer Qgis na tabela de atributos 
-            
-            Input_Table            = os.path.join(self.path_absolute , '1_SVM_' + self.VTarget_FileName + '_Grid_Map.csv') #set the filepath for the input CSV
-            Output_Layer_File_shp  = os.path.join(self.path_absolute , '1_SVM_' + self.VTarget_FileName + '_Grid_Map.shp') #set the filepath for the output shapefile
-            Output_Layer_Name      =                                   '1_SVM_' + self.VTarget_FileName
-
-
-            self.export_shapefile_of_points_to_qgis(Input_Table, Output_Layer_File_shp, Output_Layer_Name) 
-            #self.export_shapefile_of_polygons_to_qgis(Input_Table, Output_Layer_File_shp, Output_Layer_Name) 
-
-                
-            self.dlg.mMapLayerComboBox.currentIndexChanged.connect(self.mMapLayerComboBox_changed) #connecta evento do combobox select Layer Qgis na tabela de atributos 
-
             
         ###################################################################
         #Exportando arquivo RasterFile  
@@ -6046,12 +6360,65 @@ class smart_map:
             Output_Layer_File_tiff = os.path.join(self.path_absolute , '1_SVM_' + self.VTarget_FileName + '_Grid_Map.tiff')
             Output_Layer_Name      =                                   '1_SVM_' + self.VTarget_FileName
             z_field   = self.v_target
+            
+            try:
+                self.dlg.mMapLayerComboBox.currentIndexChanged.disconnect()
+            except TypeError:
+                pass  # Ignore the error if no connections exist               
+                
 
-            self.dlg.mMapLayerComboBox.currentIndexChanged.disconnect()
+            Output_Layer_File_tiff = self.export_raster_to_qgis(Input_Table, Output_Layer_File_tiff, Output_Layer_Name, z_field) 
 
-            self.export_raster_to_qgis(Input_Table, Output_Layer_File_tiff, Output_Layer_Name, z_field) 
+
+
+            ###################################################################
+            #Exportando arquivo Shapefile de pontos para QGIS 
+
+            if self.dlg.checkBox_Qgis_Vector_Points.isChecked(): 
+
+
+                #    marcou area de contorno                       e   definiu a layer de contorno) 
+                if ((self.dlg.checkBox_Area_Contorno.isChecked()) and (self.dlg.mMapLayerComboBox_AreaCont.currentIndex() >= 0)): 
+
+                    cont = cont + 1 
+                    progress.setValue(cont)                        
+                    if progress.wasCanceled():                          
+                       progress.close() 
+                       return 
+    
+                    
+                    self.export_shapefile_to_qgis(Output_Layer_File_tiff, "native:pixelstopoints") 
+
+                else: 
+                    self.dlg.checkBox_Qgis_Vector_Points.setChecked(False)           
+
+
+
+            ###################################################################
+            #Exportando arquivo Shapefile de poligonos para QGIS 
+
+            if self.dlg.checkBox_Qgis_Vector_Polygons.isChecked(): 
+                
+                #    marcou area de contorno                       e   definiu a layer de contorno) 
+                if ((self.dlg.checkBox_Area_Contorno.isChecked()) and (self.dlg.mMapLayerComboBox_AreaCont.currentIndex() >= 0)): 
+
+                    cont = cont + 1 
+                    progress.setValue(cont)                        
+                    if progress.wasCanceled():                          
+                       progress.close() 
+                       return 
+    
+                    
+                    self.export_shapefile_to_qgis(Output_Layer_File_tiff, "native:pixelstopolygons") 
+
+                else: 
+                    self.dlg.checkBox_Qgis_Vector_Polygons.setChecked(False)           
+
+
+        if self.dlg.checkBox_Qgis_Raster.isChecked(): 
 
             self.dlg.mMapLayerComboBox.currentIndexChanged.connect(self.mMapLayerComboBox_changed)
+
 
 
         ###################################################################
@@ -6091,7 +6458,7 @@ class smart_map:
         plt3.yticks(ymarks)
 
         
-        plt3.scatter(self.grid_xy[:,0], self.grid_xy[:,1], c=predictions, cmap='RdYlGn')    
+        plt3.scatter(self.grid_xy[:,0], self.grid_xy[:,1], c=predictions, cmap='RdYlGn', vmin = min(predictions), vmax = max(predictions))    
         
         clb = plt3.colorbar(aspect=20)                                     #expessura do colorbar 
         clb.ax.set_title(self.v_target)
@@ -6164,9 +6531,9 @@ class smart_map:
            k_folds = 5 
 
 
-        features = np.array(self.df_SVM_Trainfeatures, dtype=np.float)
+        features = np.array(self.df_SVM_Trainfeatures, dtype=float)
         
-        labels =   np.array(self.df_SVM_Trainlabels  , dtype=np.float)
+        labels =   np.array(self.df_SVM_Trainlabels  , dtype=float)
 
 
         maximum = len(features) + (len(features) * 4) + 3
@@ -7129,8 +7496,11 @@ class smart_map:
             self.dlg.lineEdit_ZM_NCE.setText(str(self.nce))  
             
           
-    
-            self.dlg.spinBox_ZM_NrZonas.valueChanged.disconnect()
+            try: 
+                self.dlg.spinBox_ZM_NrZonas.valueChanged.disconnect()
+            except TypeError:
+                pass  # Ignore the error if no connections exist               
+                
 
             self.dlg.spinBox_ZM_NrZonas.setValue(num_zones)
     
@@ -7261,7 +7631,7 @@ class smart_map:
             '''
             
             
-            data = np.array(self.df_ZM, dtype=np.float)
+            data = np.array(self.df_ZM, dtype=float)
 
             X = np.copy(data[:, [0, 1]])   #pega todos os dados da matriz coluna 0 (Coord_X) e coluna 1 (Coord_Y)
                        
@@ -7316,6 +7686,56 @@ class smart_map:
                alldata = np.vstack((z[:,0], z[:,1], z[:,2], z[:,3], z[:,4], z[:,5], z[:,6], z[:,7], z[:,8], z[:,9]))            
                #self.atributos_ZM = self.atributos_ZM + self.df_ZM.columns[2] + '_' + self.df_ZM.columns[3] + '_' + self.df_ZM.columns[4] + '_' + self.df_ZM.columns[5] + '_' + self.df_ZM.columns[6] + '_' + self.df_ZM.columns[7] + '_' + self.df_ZM.columns[8] + '_' + self.df_ZM.columns[9] + '_' + self.df_ZM.columns[10] + '_' + self.df_ZM.columns[11]
                
+            elif len(self.df_ZM.columns) == 13:                                #possui 11 atributos 
+               z = np.copy(data[:, [2,3,4,5,6,7,8,9,10,11,12]])                #pega todos os dados da matriz coluna 2, 3, 4, 5, 6, 7, 8, 10, 11, 12 
+               alldata = np.vstack((z[:,0], z[:,1], z[:,2], z[:,3], z[:,4], z[:,5], z[:,6], z[:,7], z[:,8], z[:,9], z[:,10]))            
+               #self.atributos_ZM = self.atributos_ZM + self.df_ZM.columns[2] + '_' + self.df_ZM.columns[3] + '_' + self.df_ZM.columns[4] + '_' + self.df_ZM.columns[5] + '_' + self.df_ZM.columns[6] + '_' + self.df_ZM.columns[7] + '_' + self.df_ZM.columns[8] + '_' + self.df_ZM.columns[9] + '_' + self.df_ZM.columns[10] + '_' + self.df_ZM.columns[11] + '_' + self.df_ZM.columns[12]
+
+            elif len(self.df_ZM.columns) == 14:                                #possui 12 atributos 
+               z = np.copy(data[:, [2,3,4,5,6,7,8,9,10,11,12,13]])             #pega todos os dados da matriz coluna 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13 
+               alldata = np.vstack((z[:,0], z[:,1], z[:,2], z[:,3], z[:,4], z[:,5], z[:,6], z[:,7], z[:,8], z[:,9], z[:,10], z[:,11]))            
+               #self.atributos_ZM = self.atributos_ZM + self.df_ZM.columns[2] + '_' + self.df_ZM.columns[3] + '_' + self.df_ZM.columns[4] + '_' + self.df_ZM.columns[5] + '_' + self.df_ZM.columns[6] + '_' + self.df_ZM.columns[7] + '_' + self.df_ZM.columns[8] + '_' + self.df_ZM.columns[9] + '_' + self.df_ZM.columns[10] + '_' + self.df_ZM.columns[11] + '_' + self.df_ZM.columns[12] + '_' + self.df_ZM.columns[13]
+
+            elif len(self.df_ZM.columns) == 15:                                #possui 13 atributos 
+               z = np.copy(data[:, [2,3,4,5,6,7,8,9,10,11,12,13,14]])          #pega todos os dados da matriz coluna 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14 
+               alldata = np.vstack((z[:,0], z[:,1], z[:,2], z[:,3], z[:,4], z[:,5], z[:,6], z[:,7], z[:,8], z[:,9], z[:,10], z[:,11], z[:,12]))            
+               #self.atributos_ZM = self.atributos_ZM + self.df_ZM.columns[2] + '_' + self.df_ZM.columns[3] + '_' + self.df_ZM.columns[4] + '_' + self.df_ZM.columns[5] + '_' + self.df_ZM.columns[6] + '_' + self.df_ZM.columns[7] + '_' + self.df_ZM.columns[8] + '_' + self.df_ZM.columns[9] + '_' + self.df_ZM.columns[10] + '_' + self.df_ZM.columns[11] + '_' + self.df_ZM.columns[12] + '_' + self.df_ZM.columns[13] + '_' + self.df_ZM.columns[14]
+
+            elif len(self.df_ZM.columns) == 16:                                #possui 14 atributos 
+               z = np.copy(data[:, [2,3,4,5,6,7,8,9,10,11,12,13,14,15]])       #pega todos os dados da matriz coluna 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15 
+               alldata = np.vstack((z[:,0], z[:,1], z[:,2], z[:,3], z[:,4], z[:,5], z[:,6], z[:,7], z[:,8], z[:,9], z[:,10], z[:,11], z[:,12], z[:,13]))            
+               #self.atributos_ZM = self.atributos_ZM + self.df_ZM.columns[2] + '_' + self.df_ZM.columns[3] + '_' + self.df_ZM.columns[4] + '_' + self.df_ZM.columns[5] + '_' + self.df_ZM.columns[6] + '_' + self.df_ZM.columns[7] + '_' + self.df_ZM.columns[8] + '_' + self.df_ZM.columns[9] + '_' + self.df_ZM.columns[10] + '_' + self.df_ZM.columns[11] + '_' + self.df_ZM.columns[12] + '_' + self.df_ZM.columns[13] + '_' + self.df_ZM.columns[14] + '_' + self.df_ZM.columns[15]
+
+            elif len(self.df_ZM.columns) == 17:                                #possui 15 atributos 
+               z = np.copy(data[:, [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]])    #pega todos os dados da matriz coluna 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16 
+               alldata = np.vstack((z[:,0], z[:,1], z[:,2], z[:,3], z[:,4], z[:,5], z[:,6], z[:,7], z[:,8], z[:,9], z[:,10], z[:,11], z[:,12], z[:,13], z[:,14]))            
+               #self.atributos_ZM = self.atributos_ZM + self.df_ZM.columns[2] + '_' + self.df_ZM.columns[3] + '_' + self.df_ZM.columns[4] + '_' + self.df_ZM.columns[5] + '_' + self.df_ZM.columns[6] + '_' + self.df_ZM.columns[7] + '_' + self.df_ZM.columns[8] + '_' + self.df_ZM.columns[9] + '_' + self.df_ZM.columns[10] + '_' + self.df_ZM.columns[11] + '_' + self.df_ZM.columns[12] + '_' + self.df_ZM.columns[13] + '_' + self.df_ZM.columns[14] + '_' + self.df_ZM.columns[15] + '_' + self.df_ZM.columns[16]
+
+            elif len(self.df_ZM.columns) == 18:                                #possui 16 atributos 
+               z = np.copy(data[:, [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]]) #pega todos os dados da matriz coluna 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17 
+               alldata = np.vstack((z[:,0], z[:,1], z[:,2], z[:,3], z[:,4], z[:,5], z[:,6], z[:,7], z[:,8], z[:,9], z[:,10], z[:,11], z[:,12], z[:,13], z[:,14], z[:,15]))            
+               #self.atributos_ZM = self.atributos_ZM + self.df_ZM.columns[2] + '_' + self.df_ZM.columns[3] + '_' + self.df_ZM.columns[4] + '_' + self.df_ZM.columns[5] + '_' + self.df_ZM.columns[6] + '_' + self.df_ZM.columns[7] + '_' + self.df_ZM.columns[8] + '_' + self.df_ZM.columns[9] + '_' + self.df_ZM.columns[10] + '_' + self.df_ZM.columns[11] + '_' + self.df_ZM.columns[12] + '_' + self.df_ZM.columns[13] + '_' + self.df_ZM.columns[14] + '_' + self.df_ZM.columns[15] + '_' + self.df_ZM.columns[16] + '_' + self.df_ZM.columns[17]
+
+            elif len(self.df_ZM.columns) == 19:                                    #possui 17 atributos 
+               z = np.copy(data[:, [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18]])  #pega todos os dados da matriz coluna 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18 
+               alldata = np.vstack((z[:,0], z[:,1], z[:,2], z[:,3], z[:,4], z[:,5], z[:,6], z[:,7], z[:,8], z[:,9], z[:,10], z[:,11], z[:,12], z[:,13], z[:,14], z[:,15], z[:,16]))            
+               #self.atributos_ZM = self.atributos_ZM + self.df_ZM.columns[2] + '_' + self.df_ZM.columns[3] + '_' + self.df_ZM.columns[4] + '_' + self.df_ZM.columns[5] + '_' + self.df_ZM.columns[6] + '_' + self.df_ZM.columns[7] + '_' + self.df_ZM.columns[8] + '_' + self.df_ZM.columns[9] + '_' + self.df_ZM.columns[10] + '_' + self.df_ZM.columns[11] + '_' + self.df_ZM.columns[12] + '_' + self.df_ZM.columns[13] + '_' + self.df_ZM.columns[14] + '_' + self.df_ZM.columns[15] + '_' + self.df_ZM.columns[16] + '_' + self.df_ZM.columns[17] + '_' + self.df_ZM.columns[18]
+
+            elif len(self.df_ZM.columns) == 20:                                      #possui 18 atributos 
+               z = np.copy(data[:, [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]]) #pega todos os dados da matriz coluna 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 
+               alldata = np.vstack((z[:,0], z[:,1], z[:,2], z[:,3], z[:,4], z[:,5], z[:,6], z[:,7], z[:,8], z[:,9], z[:,10], z[:,11], z[:,12], z[:,13], z[:,14], z[:,15], z[:,16], z[:,17]))            
+               #self.atributos_ZM = self.atributos_ZM + self.df_ZM.columns[2] + '_' + self.df_ZM.columns[3] + '_' + self.df_ZM.columns[4] + '_' + self.df_ZM.columns[5] + '_' + self.df_ZM.columns[6] + '_' + self.df_ZM.columns[7] + '_' + self.df_ZM.columns[8] + '_' + self.df_ZM.columns[9] + '_' + self.df_ZM.columns[10] + '_' + self.df_ZM.columns[11] + '_' + self.df_ZM.columns[12] + '_' + self.df_ZM.columns[13] + '_' + self.df_ZM.columns[14] + '_' + self.df_ZM.columns[15] + '_' + self.df_ZM.columns[16] + '_' + self.df_ZM.columns[17] + '_' + self.df_ZM.columns[18] + '_' + self.df_ZM.columns[19]
+
+            elif len(self.df_ZM.columns) == 21:                                         #possui 19 atributos 
+               z = np.copy(data[:, [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]]) #pega todos os dados da matriz coluna 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 
+               alldata = np.vstack((z[:,0], z[:,1], z[:,2], z[:,3], z[:,4], z[:,5], z[:,6], z[:,7], z[:,8], z[:,9], z[:,10], z[:,11], z[:,12], z[:,13], z[:,14], z[:,15], z[:,16], z[:,17], z[:,18]))            
+               #self.atributos_ZM = self.atributos_ZM + self.df_ZM.columns[2] + '_' + self.df_ZM.columns[3] + '_' + self.df_ZM.columns[4] + '_' + self.df_ZM.columns[5] + '_' + self.df_ZM.columns[6] + '_' + self.df_ZM.columns[7] + '_' + self.df_ZM.columns[8] + '_' + self.df_ZM.columns[9] + '_' + self.df_ZM.columns[10] + '_' + self.df_ZM.columns[11] + '_' + self.df_ZM.columns[12] + '_' + self.df_ZM.columns[13] + '_' + self.df_ZM.columns[14] + '_' + self.df_ZM.columns[15] + '_' + self.df_ZM.columns[16] + '_' + self.df_ZM.columns[17] + '_' + self.df_ZM.columns[18] + '_' + self.df_ZM.columns[19] + '_' + self.df_ZM.columns[20]
+
+            elif len(self.df_ZM.columns) == 22:                                            #possui 20 atributos 
+               z = np.copy(data[:, [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]]) #pega todos os dados da matriz coluna 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21 
+               alldata = np.vstack((z[:,0], z[:,1], z[:,2], z[:,3], z[:,4], z[:,5], z[:,6], z[:,7], z[:,8], z[:,9], z[:,10], z[:,11], z[:,12], z[:,13], z[:,14], z[:,15], z[:,16], z[:,17], z[:,18], z[:,19]))            
+               #self.atributos_ZM = self.atributos_ZM + self.df_ZM.columns[2] + '_' + self.df_ZM.columns[3] + '_' + self.df_ZM.columns[4] + '_' + self.df_ZM.columns[5] + '_' + self.df_ZM.columns[6] + '_' + self.df_ZM.columns[7] + '_' + self.df_ZM.columns[8] + '_' + self.df_ZM.columns[9] + '_' + self.df_ZM.columns[10] + '_' + self.df_ZM.columns[11] + '_' + self.df_ZM.columns[12] + '_' + self.df_ZM.columns[13] + '_' + self.df_ZM.columns[14] + '_' + self.df_ZM.columns[15] + '_' + self.df_ZM.columns[16] + '_' + self.df_ZM.columns[17] + '_' + self.df_ZM.columns[18] + '_' + self.df_ZM.columns[19] + '_' + self.df_ZM.columns[20] + '_' + self.df_ZM.columns[21]
+
             else: 
                 #mensagem de retorno ao usuário 
                 msg_box = QMessageBox()
@@ -7350,12 +7770,23 @@ class smart_map:
             
             #salvando o arquivo .cla  (arquivo que contem a coordenada X, Y, e a classe a qual pertence o ponto)    X, Y, Classe             
             lista = []
+            
             for i in range(len(X)):
                 lista.append([X[i,0], X[i,1], cluster_membership[i]])
-                    
-            lista = np.array(lista)             
                 
-         
+                
+            lista = np.array(lista)             
+            
+            lista_CoordX = list(set(lista[:,0]))  #get distincit elements of list 
+            lista_CoordY = list(set(lista[:,1]))  #get distincit elements of list 
+
+            lista_CoordX.sort()
+            lista_CoordY.sort()
+
+            self.Pixel_Size_X_ZM = int(lista_CoordX[1] - lista_CoordX[0])
+            self.Pixel_Size_Y_ZM = int(lista_CoordY[1] - lista_CoordY[0])
+            
+            
             df_ZM_Classe = pd.DataFrame(np.atleast_2d(lista), columns=['CoordX_SM', 'CoordY_SM', 'Classe'])
             #cria uma coluna a partir do índice do dataframe
             #id_index = df_ZM_Classe.index.values
@@ -7514,6 +7945,36 @@ class smart_map:
                 elif num_zones == 10:                                  # possui 10 atributos 
                   lista.append([X[i,0], X[i,1], u_orig[i,0], u_orig[i,1], u_orig[i,2], u_orig[i,3], u_orig[i,4], u_orig[i,5], u_orig[i,6], u_orig[i,7], u_orig[i,8], u_orig[i,9]])
                   classes = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
+                elif num_zones == 11:                                  # possui 11 atributos 
+                  lista.append([X[i,0], X[i,1], u_orig[i,0], u_orig[i,1], u_orig[i,2], u_orig[i,3], u_orig[i,4], u_orig[i,5], u_orig[i,6], u_orig[i,7], u_orig[i,8], u_orig[i,9], u_orig[i,10]])
+                  classes = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11']
+                elif num_zones == 12:                                  # possui 12 atributos 
+                  lista.append([X[i,0], X[i,1], u_orig[i,0], u_orig[i,1], u_orig[i,2], u_orig[i,3], u_orig[i,4], u_orig[i,5], u_orig[i,6], u_orig[i,7], u_orig[i,8], u_orig[i,9], u_orig[i,10], u_orig[i,11]])
+                  classes = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']
+                elif num_zones == 13:                                  # possui 13 atributos 
+                  lista.append([X[i,0], X[i,1], u_orig[i,0], u_orig[i,1], u_orig[i,2], u_orig[i,3], u_orig[i,4], u_orig[i,5], u_orig[i,6], u_orig[i,7], u_orig[i,8], u_orig[i,9], u_orig[i,10], u_orig[i,11], u_orig[i,12]])
+                  classes = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13']
+                elif num_zones == 14:                                  # possui 14 atributos 
+                  lista.append([X[i,0], X[i,1], u_orig[i,0], u_orig[i,1], u_orig[i,2], u_orig[i,3], u_orig[i,4], u_orig[i,5], u_orig[i,6], u_orig[i,7], u_orig[i,8], u_orig[i,9], u_orig[i,10], u_orig[i,11], u_orig[i,12], u_orig[i,13]])
+                  classes = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14']
+                elif num_zones == 15:                                  # possui 15 atributos 
+                  lista.append([X[i,0], X[i,1], u_orig[i,0], u_orig[i,1], u_orig[i,2], u_orig[i,3], u_orig[i,4], u_orig[i,5], u_orig[i,6], u_orig[i,7], u_orig[i,8], u_orig[i,9], u_orig[i,10], u_orig[i,11], u_orig[i,12], u_orig[i,13], u_orig[i,14]])
+                  classes = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15']
+                elif num_zones == 16:                                  # possui 16 atributos 
+                  lista.append([X[i,0], X[i,1], u_orig[i,0], u_orig[i,1], u_orig[i,2], u_orig[i,3], u_orig[i,4], u_orig[i,5], u_orig[i,6], u_orig[i,7], u_orig[i,8], u_orig[i,9], u_orig[i,10], u_orig[i,11], u_orig[i,12], u_orig[i,13], u_orig[i,14], u_orig[i,15]])
+                  classes = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16']
+                elif num_zones == 17:                                  # possui 17 atributos 
+                  lista.append([X[i,0], X[i,1], u_orig[i,0], u_orig[i,1], u_orig[i,2], u_orig[i,3], u_orig[i,4], u_orig[i,5], u_orig[i,6], u_orig[i,7], u_orig[i,8], u_orig[i,9], u_orig[i,10], u_orig[i,11], u_orig[i,12], u_orig[i,13], u_orig[i,14], u_orig[i,15], u_orig[i,16]])
+                  classes = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17']
+                elif num_zones == 18:                                  # possui 18 atributos 
+                  lista.append([X[i,0], X[i,1], u_orig[i,0], u_orig[i,1], u_orig[i,2], u_orig[i,3], u_orig[i,4], u_orig[i,5], u_orig[i,6], u_orig[i,7], u_orig[i,8], u_orig[i,9], u_orig[i,10], u_orig[i,11], u_orig[i,12], u_orig[i,13], u_orig[i,14], u_orig[i,15], u_orig[i,16], u_orig[i,17]])
+                  classes = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18']
+                elif num_zones == 19:                                  # possui 19 atributos 
+                  lista.append([X[i,0], X[i,1], u_orig[i,0], u_orig[i,1], u_orig[i,2], u_orig[i,3], u_orig[i,4], u_orig[i,5], u_orig[i,6], u_orig[i,7], u_orig[i,8], u_orig[i,9], u_orig[i,10], u_orig[i,11], u_orig[i,12], u_orig[i,13], u_orig[i,14], u_orig[i,15], u_orig[i,16], u_orig[i,17], u_orig[i,18]])
+                  classes = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19']
+                elif num_zones == 20:                                  # possui 20 atributos 
+                  lista.append([X[i,0], X[i,1], u_orig[i,0], u_orig[i,1], u_orig[i,2], u_orig[i,3], u_orig[i,4], u_orig[i,5], u_orig[i,6], u_orig[i,7], u_orig[i,8], u_orig[i,9], u_orig[i,10], u_orig[i,11], u_orig[i,12], u_orig[i,13], u_orig[i,14], u_orig[i,15], u_orig[i,16], u_orig[i,17], u_orig[i,18], u_orig[i,19]])
+                  classes = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20']
                 else: 
                     #mensagem de retorno ao usuário 
                     msg_box = QMessageBox()
@@ -7565,6 +8026,46 @@ class smart_map:
             elif num_zones == 10:                                 # possui 10 atributos 
               lista = np.array(lista)             
               df_MP = pd.DataFrame(np.atleast_2d(lista), columns=[self.Cord_X, self.Cord_Y, 'Cls1', 'Cls2', 'Cls3', 'Cls4', 'Cls5', 'Cls6', 'Cls7', 'Cls8', 'Cls9', 'Cls10'])
+
+            elif num_zones == 11:                                 # possui 11 atributos 
+              lista = np.array(lista)             
+              df_MP = pd.DataFrame(np.atleast_2d(lista), columns=[self.Cord_X, self.Cord_Y, 'Cls1', 'Cls2', 'Cls3', 'Cls4', 'Cls5', 'Cls6', 'Cls7', 'Cls8', 'Cls9', 'Cls10', 'Cls11'])
+
+            elif num_zones == 12:                                 # possui 12 atributos 
+              lista = np.array(lista)             
+              df_MP = pd.DataFrame(np.atleast_2d(lista), columns=[self.Cord_X, self.Cord_Y, 'Cls1', 'Cls2', 'Cls3', 'Cls4', 'Cls5', 'Cls6', 'Cls7', 'Cls8', 'Cls9', 'Cls10', 'Cls11', 'Cls12'])
+
+            elif num_zones == 13:                                 # possui 13 atributos 
+              lista = np.array(lista)             
+              df_MP = pd.DataFrame(np.atleast_2d(lista), columns=[self.Cord_X, self.Cord_Y, 'Cls1', 'Cls2', 'Cls3', 'Cls4', 'Cls5', 'Cls6', 'Cls7', 'Cls8', 'Cls9', 'Cls10', 'Cls11', 'Cls12', 'Cls13'])
+
+            elif num_zones == 14:                                 # possui 14 atributos 
+              lista = np.array(lista)             
+              df_MP = pd.DataFrame(np.atleast_2d(lista), columns=[self.Cord_X, self.Cord_Y, 'Cls1', 'Cls2', 'Cls3', 'Cls4', 'Cls5', 'Cls6', 'Cls7', 'Cls8', 'Cls9', 'Cls10', 'Cls11', 'Cls12', 'Cls13', 'Cls14'])
+
+            elif num_zones == 15:                                 # possui 15 atributos 
+              lista = np.array(lista)             
+              df_MP = pd.DataFrame(np.atleast_2d(lista), columns=[self.Cord_X, self.Cord_Y, 'Cls1', 'Cls2', 'Cls3', 'Cls4', 'Cls5', 'Cls6', 'Cls7', 'Cls8', 'Cls9', 'Cls10', 'Cls11', 'Cls12', 'Cls13', 'Cls14', 'Cls15'])
+
+            elif num_zones == 16:                                 # possui 16 atributos 
+              lista = np.array(lista)             
+              df_MP = pd.DataFrame(np.atleast_2d(lista), columns=[self.Cord_X, self.Cord_Y, 'Cls1', 'Cls2', 'Cls3', 'Cls4', 'Cls5', 'Cls6', 'Cls7', 'Cls8', 'Cls9', 'Cls10', 'Cls11', 'Cls12', 'Cls13', 'Cls14', 'Cls15', 'Cls16'])
+
+            elif num_zones == 17:                                 # possui 17 atributos 
+              lista = np.array(lista)             
+              df_MP = pd.DataFrame(np.atleast_2d(lista), columns=[self.Cord_X, self.Cord_Y, 'Cls1', 'Cls2', 'Cls3', 'Cls4', 'Cls5', 'Cls6', 'Cls7', 'Cls8', 'Cls9', 'Cls10', 'Cls11', 'Cls12', 'Cls13', 'Cls14', 'Cls15', 'Cls16', 'Cls17'])
+
+            elif num_zones == 18:                                 # possui 18 atributos 
+              lista = np.array(lista)             
+              df_MP = pd.DataFrame(np.atleast_2d(lista), columns=[self.Cord_X, self.Cord_Y, 'Cls1', 'Cls2', 'Cls3', 'Cls4', 'Cls5', 'Cls6', 'Cls7', 'Cls8', 'Cls9', 'Cls10', 'Cls11', 'Cls12', 'Cls13', 'Cls14', 'Cls15', 'Cls16', 'Cls17', 'Cls18'])
+
+            elif num_zones == 19:                                 # possui 19 atributos 
+              lista = np.array(lista)             
+              df_MP = pd.DataFrame(np.atleast_2d(lista), columns=[self.Cord_X, self.Cord_Y, 'Cls1', 'Cls2', 'Cls3', 'Cls4', 'Cls5', 'Cls6', 'Cls7', 'Cls8', 'Cls9', 'Cls10', 'Cls11', 'Cls12', 'Cls13', 'Cls14', 'Cls15', 'Cls16', 'Cls17', 'Cls18', 'Cls19'])
+
+            elif num_zones == 20:                                 # possui 20 atributos 
+              lista = np.array(lista)             
+              df_MP = pd.DataFrame(np.atleast_2d(lista), columns=[self.Cord_X, self.Cord_Y, 'Cls1', 'Cls2', 'Cls3', 'Cls4', 'Cls5', 'Cls6', 'Cls7', 'Cls8', 'Cls9', 'Cls10', 'Cls11', 'Cls12', 'Cls13', 'Cls14', 'Cls15', 'Cls16', 'Cls17', 'Cls18', 'Cls19', 'Cls20'])
 
             else: 
                 #mensagem de retorno ao usuário 
@@ -7717,21 +8218,10 @@ class smart_map:
             self.dlg.tabWidget_ZM.setCurrentIndex(3)          
             
             
-            if self.dlg.checkBox_Qgis_Vector.isChecked(): 
-
-                self.dlg.mMapLayerComboBox.currentIndexChanged.disconnect()                                 #disconnecta evento do combobox select Layer Qgis na tabela de atributos 
                 
+            ###################################################################
+            #Exportando arquivo Raster para QGIS 
 
-                Input_Table            = os.path.join(self.path_absolute , '2_ZM_' + self.VTarget_FileName + '_Class.csv')   #set the filepath for the input CSV
-                Output_Layer_File_shp  = os.path.join(self.path_absolute , '2_ZM_' + self.VTarget_FileName + '_Class.shp')   #set the filepath for the output shapefile
-                Output_Layer_Name      =                                   '2_ZM_' + self.VTarget_FileName
-
-                self.export_shapefile_of_points_to_qgis(Input_Table, Output_Layer_File_shp, Output_Layer_Name)                   
-                #self.export_shapefile_of_polygons_to_qgis(Input_Table, Output_Layer_File_shp, Output_Layer_Name) 
-
-                self.dlg.mMapLayerComboBox.currentIndexChanged.connect(self.mMapLayerComboBox_changed)      #connecta evento do combobox select Layer Qgis na tabela de atributos 
-
-                
             if self.dlg.checkBox_Qgis_Raster.isChecked(): 
  
 
@@ -7740,9 +8230,59 @@ class smart_map:
                 Output_Layer_Name      =                                   '2_ZM_' + self.VTarget_FileName
                 z_field   = 'Classe'
 
-                self.dlg.mMapLayerComboBox.currentIndexChanged.disconnect()
+                try: 
+                    self.dlg.mMapLayerComboBox.currentIndexChanged.disconnect()
+                except TypeError:
+                    pass  # Ignore the error if no connections exist               
+                    
 
-                self.export_raster_to_qgis(Input_Table, Output_Layer_File_tiff, Output_Layer_Name, z_field) 
+                Output_Layer_File_tiff = self.export_raster_to_qgis(Input_Table, Output_Layer_File_tiff, Output_Layer_Name, z_field) 
+
+
+
+                ###################################################################
+                #Exportando arquivo Shapefile de pontos para QGIS 
+    
+                if self.dlg.checkBox_Qgis_Vector_Points.isChecked(): 
+    
+                    #    marcou area de contorno                       e   definiu a layer de contorno) 
+                    if ((self.dlg.checkBox_Area_Contorno.isChecked()) and (self.dlg.mMapLayerComboBox_AreaCont.currentIndex() >= 0)): 
+
+                        cont = cont + 1 
+                        progress.setValue(cont)                        
+                        if progress.wasCanceled():                          
+                           progress.close() 
+                           return 
+        
+                        
+                        self.export_shapefile_to_qgis(Output_Layer_File_tiff, "native:pixelstopoints") 
+
+                    else: 
+                        self.dlg.checkBox_Qgis_Vector_Points.setChecked(False)           
+
+
+                ###################################################################
+                #Exportando arquivo Shapefile de poligonos para QGIS 
+    
+                if self.dlg.checkBox_Qgis_Vector_Polygons.isChecked(): 
+                    
+                    #    marcou area de contorno                       e   definiu a layer de contorno) 
+                    if ((self.dlg.checkBox_Area_Contorno.isChecked()) and (self.dlg.mMapLayerComboBox_AreaCont.currentIndex() >= 0)): 
+
+                        cont = cont + 1 
+                        progress.setValue(cont)                        
+                        if progress.wasCanceled():                          
+                           progress.close() 
+                           return 
+        
+                        
+                        self.export_shapefile_to_qgis(Output_Layer_File_tiff, "native:pixelstopolygons") 
+
+                    else: 
+                        self.dlg.checkBox_Qgis_Vector_Polygons.setChecked(False)           
+
+
+            if self.dlg.checkBox_Qgis_Raster.isChecked(): 
 
                 self.dlg.mMapLayerComboBox.currentIndexChanged.connect(self.mMapLayerComboBox_changed)
 
@@ -7770,7 +8310,454 @@ class smart_map:
     #############################################################################################################################
 
 
-    def export_shapefile_of_points_to_qgis(self, Input_Table, Output_Layer_File_shp, Output_Layer_Name):
+
+    def export_raster_to_qgis(self, Input_Table, Output_Layer_File_tiff, Output_Layer_Name, z_field):
+
+
+        #Input_Table            =                                   '2_ZM_' + self.atributos_ZM + '_Class.csv'
+        #Output_Layer_File_tiff = os.path.join(self.path_absolute , '2_ZM_' + self.atributos_ZM + '_Class.tiff')
+        #Output_Layer_Name      =                                   '2_ZM_' + self.atributos_ZM
+
+        
+        filename  = Output_Layer_File_tiff[:-5]           #copia o nome do arquivo, retirando sua extensão: '.tiff'
+        layername = Output_Layer_Name
+        
+        cont = 1
+        
+        Output_Layer_File_tiff = filename  + '_' + str(cont) + '.tiff'
+        Output_Layer_Name      = layername + '_' + str(cont)  
+        
+        while os.path.isfile(Output_Layer_File_tiff):     #se já existe o arquivo na pasta, renomeia para:  *_1.tiff', *_2.tiff'...
+            cont = cont + 1
+            Output_Layer_File_tiff = filename  + '_' + str(cont) + '.tiff'
+            Output_Layer_Name      = layername + '_' + str(cont)  
+
+
+        # your directory with all your csv files in it
+        dir_with_csvs = os.path.join(self.path_absolute)  #+ '/' 
+        
+        # make it the active directory
+        os.chdir(dir_with_csvs)
+
+        csvfiles = [Input_Table] 
+
+        lon_field = self.Cord_X                         #set the name for the field containing the longitude
+        lat_field = self.Cord_Y                         #set the name for the field containing the latitude
+                  
+        # loop through each CSV file
+        # for each CSV file, make an associated VRT file to be used with gdal_grid command
+        # and then run the gdal_grid util in a subprocess instance
+        for fn in csvfiles:
+            vrt_fn = fn.replace(".csv", ".vrt")
+            lyr_name = fn.replace('.csv', '')
+            out_tif = fn.replace('.csv', '.tiff')
+            with open(vrt_fn, 'w') as fn_vrt:
+                fn_vrt.write('<OGRVRTDataSource>\n')
+                fn_vrt.write('\t<OGRVRTLayer name="%s">\n' % lyr_name)
+                fn_vrt.write('\t\t<SrcDataSource>%s</SrcDataSource>\n' % fn)
+                fn_vrt.write('\t\t<GeometryType>wkbPoint</GeometryType>\n')
+                fn_vrt.write('\t\t<GeometryField encoding="PointFromColumns" x="' + lon_field + '" y="' + lat_field + '" z="' + z_field + '"/>\n')
+                fn_vrt.write('\t</OGRVRTLayer>\n')
+                fn_vrt.write('</OGRVRTDataSource>\n')
+        
+                
+                
+                if  '2_ZM_' in Input_Table:    #set Pixel_size of ZM Map 
+
+                    Pixel_Size_X = float(self.Pixel_Size_X_ZM) 
+                    Pixel_Size_Y = float(self.Pixel_Size_Y_ZM) 
+                    self.Num_Points_X = int((float(self.Cord_X_max) - float(self.Cord_X_min)) / float(self.Pixel_Size_X_ZM))         
+                    self.Num_Points_Y = int((float(self.Cord_Y_max) - float(self.Cord_Y_min)) / float(self.Pixel_Size_Y_ZM))  
+                    
+
+                else: 
+                  
+                    Pixel_Size_X = float(self.Pixel_Size_X) 
+                    Pixel_Size_Y = float(self.Pixel_Size_Y) 
+                    self.Num_Points_X = int((float(self.Cord_X_max) - float(self.Cord_X_min)) / float(self.Pixel_Size_X))         
+                    self.Num_Points_Y = int((float(self.Cord_Y_max) - float(self.Cord_Y_min)) / float(self.Pixel_Size_Y))         
+
+
+                Num_Points_X = float(self.Num_Points_X) 
+                Cord_X_min   = self.Cord_X_min 
+                Cord_X_max   = (Pixel_Size_X * Num_Points_X) + Cord_X_min 
+
+
+                Num_Points_Y = float(self.Num_Points_Y) 
+                Cord_Y_min   = self.Cord_Y_min 
+                Cord_Y_max   = (Pixel_Size_Y * Num_Points_Y) + Cord_Y_min      #ajustar Cord_Y_max  para que o tamanho do pixel fique com valor exato de 5m. 
+
+
+           
+            if '2_ZM' in Output_Layer_File_tiff:   #para ZM utiliza interpolador do vizinho mais proximo -> não interpola, pega apenas o vizinho + proximo
+                gdal_cmd = [
+                    'gdal_grid',
+                    '-a', 'nearest:radius1=0.0:radius2=0.0:angle=0.0:nodata=0.0',
+                    '-zfield', z_field,
+                    '-txe', str(self.Cord_X_min), str(Cord_X_max),
+                    '-tye', str(self.Cord_Y_min), str(Cord_Y_max),
+                    '-outsize', str(self.Num_Points_X), str(self.Num_Points_Y),
+                    '-ot', 'UInt16', '-of', 'GTiff',
+                    '-l', lyr_name, vrt_fn, out_tif
+                ]
+            else:
+                #sem metodo interpolador
+                gdal_cmd = [
+                    'gdal_grid',
+                    '-zfield', z_field,
+                    '-txe', str(self.Cord_X_min), str(Cord_X_max),
+                    '-tye', str(self.Cord_Y_min), str(Cord_Y_max),
+                    '-outsize', str(self.Num_Points_X), str(self.Num_Points_Y),
+                    '-ot', 'Float64', '-of', 'GTiff',
+                    '-l', lyr_name, vrt_fn, out_tif
+                ]
+
+            subprocess.call(gdal_cmd)  #criar arquivo .tiff   (arquivo sem area de contorno)
+
+
+        #######################################################################
+        #fazer o recorte do raster de acordo com o limite de contorno     
+
+
+        #(não marcou area de contorno)                       ou  (marcou area de contorno                       e  não definiu a layer de contorno) 
+        if (not self.dlg.checkBox_Area_Contorno.isChecked()) or ((self.dlg.checkBox_Area_Contorno.isChecked()) and (self.dlg.mMapLayerComboBox_AreaCont.currentIndex() < 0)): 
+
+            #para criar e registrar uma  Rasterlayer no QGIS, adiciona apos a layer corrente selecionada 
+            #self.iface.addRasterLayer(out_tif, lyr_name)                       
+
+            #para adicionar a layer em uma posição absoluta no QGIS 
+
+            #create a RasterLayer 
+            rlayer = QgsRasterLayer(out_tif, lyr_name)
+            # first add the layer without showing it
+            QgsProject.instance().addMapLayer(rlayer, False)
+            # obtain the layer tree of the top-level group in the project
+            layerTree = self.iface.layerTreeCanvasBridge().rootGroup()
+            # the position is a number starting from 0, with -1 an alias for the end
+            layerTree.insertChildNode(-1, QgsLayerTreeLayer(rlayer))
+            #define color_ramp of raster layer  
+            self.define_raster_color_ramp(rlayer, Output_Layer_Name)
+
+
+            #set CRS da layer RasterLayer 
+            #rasterLayer = self.iface.activeLayer()
+            selectedLayer = self.dlg.mMapLayerComboBox.currentLayer()
+
+            coordenate_reference = selectedLayer.crs().description()
+            
+            if 'SAD69' in coordenate_reference: 
+                
+                crs = QgsProject.instance().crs().authid()  #get CRS of project   EX: EPSG:32723
+            
+            else:      
+
+                crs = selectedLayer.crs().authid()  #EPSG:32723  -> pegar so depois de: 
+
+                    
+            crs = crs.split(':')               #gera uma lista:  ['EPSG', '32723'] 
+            crs = crs[1]                       #segundo elemento da lista: '32723'
+            CRS = QgsCoordinateReferenceSystem()
+            CRS.createFromSrid(int(crs))
+            rlayer.setCrs(CRS)
+            rlayer.crs().postgisSrid()
+            
+
+            #recortar o arquivo raster (.tiff)  manualmente dentro do QGIS 
+
+            #usar o QGIS ->  ir em Raster -> Extraction  -> Clip Raster by Mask Layer 
+            #escolher a Input Layer (Layer Raster)
+            #escolher a Mask Layer  (Poligono de Contorno)
+            #escolher o Source CRS 
+            #escolher o Target CRS 
+            #Assign a specified nodata value to output bands ->  para excluir a área fora do poligono -> colocar -999999999.000000                
+
+        else:  #usuário marcou area de contorno                  
+
+            if self.dlg.mMapLayerComboBox_AreaCont.currentIndex() >=  0: #usuário definiu poligono para recorte da layerRaster    
+
+                #recortar o arquivo raster (.tiff)  usando uma layer = polygonLayer 
+                Input_Layer_File_tiff  = out_tif                                                #r"C:\Users\Gustavo\Documents\QGISProjects\ProjetoAraponga\2_ZM_K_Class.tiff"         
+                Input_Layer_Poligon    = self.dlg.mMapLayerComboBox_AreaCont.currentLayer()     #r"C:\Users\Gustavo\Documents\QGISProjects\ProjetoAraponga\Limite_Area_Poligono.shp" 
+
+                coordenate_reference = Input_Layer_Poligon.crs().description()
+                
+                if 'SAD69' in coordenate_reference: 
+                    
+                    crs = QgsProject.instance().crs().authid()                 #get CRS of project        #EPSG:32723
+                
+                else:      
+
+                    crs = Input_Layer_Poligon.crs().authid()                   #get CRS of Poligon Layer  #EPSG:32723  
+
+
+                    
+                if not os.path.isfile(Input_Layer_File_tiff):
+                    print ("File doesn't exists", Input_Layer_File_tiff)
+                    return None
+                else:
+                    
+                    params = {'INPUT': Input_Layer_File_tiff,
+                              'MASK': Input_Layer_Poligon,
+                              'SOURCE_CRS': crs, #'EPSG:32723',
+                              'TARGET_CRS': crs, 
+                              'NODATA': -999999999.0,
+                              'ALPHA_BAND': False,
+                              'CROP_TO_CUTLINE': True,
+                              #'KEEP_RESOLUTION': True,
+                              #'OPTIONS': 'COMPRESS=LZW',  
+                              #'DATA_TYPE': 0,  # Byte
+                              'OUTPUT': Output_Layer_File_tiff,
+                              }
+            
+                    feedback = QgsProcessingFeedback()
+                    alg_name = 'gdal:cliprasterbymasklayer'
+                    #alg_name = 'saga:kmeansclusteringforgrids'
+                    #print(processing.algorithmHelp(alg_name))  #imprime o Help do comando 
+                    
+                    processing.run(alg_name, params, feedback=feedback)
+
+                    #else: 
+
+                         #gdal_cmd = 'gdalwarp -overwrite -s_srs EPSG:32723 -t_srs EPSG:32723 -of GTiff -cutline F:/Projetos/QGISProjects/ProjetoBrauna/Limite_Area2.shp -cl Limite_Area2 -crop_to_cutline -dstnodata -999999999.0 F:/Projetos/QGISProjects/ProjetoBrauna/Smart-Map/1_Krig_P_Grid_Map.tiff F:/Projetos/QGISProjects/ProjetoBrauna/Smart-Map/1_Krig_P_Grid_Map_Cut.tiff'
+    
+                    #    gdal_cmd  = 'gdalwarp -overwrite -s_srs ' + crs + ' -t_srs ' +  crs + ' -of GTiff -cutline ' + Input_Layer_Poligon_path +  ' -cl ' + Input_Layer_Poligon_filename[0] + ' -crop_to_cutline -dstnodata -999999999.0 ' + os.path.join(self.path_absolute , Input_Layer_File_tiff)  + ' ' + Output_Layer_File_tiff
+     
+                         #print(gdal_cmd)
+                    #    subprocess.call(gdal_cmd, shell=True)  #criar arquivo .tiff cut  (arquivo sem area de contorno)
+
+    
+                    #para criar e registrar uma  Rasterlayer no QGIS, adiciona apos a layer corrente selecionada 
+                    #self.iface.addRasterLayer(Output_Layer_File_tiff, Output_Layer_Name)  
+
+                    #para adicionar a layer em uma posição absoluta no QGIS 
+
+                    #create a RasterLayer 
+                    rlayer = QgsRasterLayer(Output_Layer_File_tiff, Output_Layer_Name)
+                    # first add the layer without showing it
+                    QgsProject.instance().addMapLayer(rlayer, False)
+                    # obtain the layer tree of the top-level group in the project
+                    layerTree = self.iface.layerTreeCanvasBridge().rootGroup()
+                    # the position is a number starting from 0, with -1 an alias for the end
+                    layerTree.insertChildNode(-1, QgsLayerTreeLayer(rlayer))
+                    #define color_ramp of raster layer  
+                    self.define_raster_color_ramp(rlayer, Output_Layer_Name)
+
+
+        return Output_Layer_File_tiff 
+
+
+
+    # ============================================================
+    # FUNÇÃO ORIGINAL — comentada (dependia de checagem de versão do QGIS)
+    # O problema: rp['color1'], rp['stops'] e rp['color2'] retornam strings
+    # com formato diferente em cada versão do QGIS (3.28/3.34 vs 3.40/3.44),
+    # quebrando os índices fixos usados para extrair R,G,B,A.
+    # ============================================================
+    # def define_raster_color_ramp(self, layer, Output_Layer_Name):
+    #
+    #     #renderer = layer.renderer()
+    #     provider = layer.dataProvider()
+    #     extent = layer.extent()
+    #     stats = provider.bandStatistics(1, QgsRasterBandStats.All, extent, 0)
+    #     min_value = stats.minimumValue
+    #     max_value = stats.maximumValue
+    #
+    #     myStyle = QgsStyle().defaultStyle()
+    #     ramp_names = myStyle.colorRampNames()
+    #     dict = {}
+    #     for i, name in enumerate(ramp_names):
+    #         dict[ramp_names[i]] = i
+    #     ramp = myStyle.colorRamp('RdYlGn')
+    #
+    #     rp = ramp.properties()
+    #     # rp['color1'] muda de formato entre versões do QGIS:
+    #     #   3.28/3.34: '215,25,28,255'
+    #     #   3.40/3.44: '215,25,28,255,rgb:0.843...,0.098...,0.109...,1'
+    #     # O mesmo ocorre com rp['stops'] e rp['color2'].
+    #
+    #     if '2_ZM' in Output_Layer_Name:
+    #         number_classes = self.dlg.spinBox_ZM_NrZonas.value()
+    #     else:
+    #         number_classes = 5
+    #     interval = (max_value - min_value) / (number_classes - 1)
+    #     soma = min_value
+    #     classes = []
+    #     for i in range(number_classes):
+    #         classes.append(round(soma, 10))
+    #         soma += interval
+    #
+    #     qgis_version = qgis.utils.Qgis.QGIS_VERSION
+    #
+    #     if ('3.40' in qgis_version) or ('3.44' in qgis_version):
+    #         c1    = rp['color1'].replace(";", ",").split(",")
+    #         stops = rp['stops'].replace(";", ",").split(",")
+    #         c2    = rp['color2'].replace(";", ",").split(",")
+    #         # índices para stops nesta versão: stop1=1..4, stop2=11..14, stop3=21..24
+    #     else:  # 3.28 e 3.34
+    #         c1    = [int(e) for e in rp['color1'].split(',')]
+    #         stops = [e for e in re.split('[,;:]', rp['stops'])]
+    #         c2    = [int(e) for e in rp['color2'].split(',')]
+    #         # índices para stops nesta versão: stop1=1..4, stop2=8..11, stop3=15..18
+    #
+    #     if number_classes == 2:
+    #         color_list = [ QgsColorRampShader.ColorRampItem(classes[0], QColor(int(c1[0]),int(c1[1]),int(c1[2]),int(c1[3])), '%.1f' % classes[0]),
+    #                        QgsColorRampShader.ColorRampItem(classes[1], QColor(int(c2[0]),int(c2[1]),int(c2[2]),int(c2[3])), '%.1f' % classes[1]) ]
+    #     elif number_classes == 3:
+    #         color_list = [ QgsColorRampShader.ColorRampItem(classes[0], QColor(int(c1[0]),int(c1[1]),int(c1[2]),int(c1[3])),     '%.1f' % classes[0]),
+    #                        QgsColorRampShader.ColorRampItem(classes[1], QColor(int(stops[1]),int(stops[2]),int(stops[3]),int(stops[4])), '%.1f' % classes[1]),
+    #                        QgsColorRampShader.ColorRampItem(classes[2], QColor(int(c2[0]),int(c2[1]),int(c2[2]),int(c2[3])),     '%.1f' % classes[2]) ]
+    #     elif number_classes == 4:
+    #         if ('3.40' in qgis_version) or ('3.44' in qgis_version):
+    #             color_list = [ ..., stops[11..14], ... ]   # índices diferentes por versão
+    #         else:
+    #             color_list = [ ..., stops[8..11], ... ]
+    #     else:  # 5 classes
+    #         if ('3.40' in qgis_version) or ('3.44' in qgis_version):
+    #             color_list = [ ..., stops[1..4], stops[11..14], stops[21..24], ... ]
+    #         else:
+    #             color_list = [ ..., stops[1..4], stops[8..11], stops[15..18], ... ]
+    #
+    #     myRasterShader = QgsRasterShader()
+    #     myColorRamp = QgsColorRampShader()
+    #     myColorRamp.setColorRampItemList(color_list)
+    #     myColorRamp.setColorRampType(QgsColorRampShader.Interpolated)
+    #     myRasterShader.setRasterShaderFunction(myColorRamp)
+    #     myPseudoRenderer = QgsSingleBandPseudoColorRenderer(layer.dataProvider(), 1, myRasterShader)
+    #     myPseudoRenderer.setClassificationMax(max_value)
+    #     myPseudoRenderer.setClassificationMin(min_value)
+    #     layer.setRenderer(myPseudoRenderer)
+    #     layer.triggerRepaint()
+    # ============================================================
+
+
+    # ============================================================
+    # FUNÇÃO NOVA — genérica, independente de versão do QGIS
+    # Usa a API direta do objeto QgsGradientColorRamp:
+    #   ramp.color1()  → QColor da cor inicial (vermelho)
+    #   ramp.color2()  → QColor da cor final   (verde)
+    #   ramp.stops()   → lista de QgsGradientStop com atributo .color (QColor)
+    # Não faz parse de strings, portanto não quebra com mudanças de formato.
+    # ============================================================
+    def define_raster_color_ramp(self, layer, Output_Layer_Name):
+
+        provider  = layer.dataProvider()
+        extent    = layer.extent()
+        stats     = provider.bandStatistics(1, QgsRasterBandStats.All, extent, 0)
+        min_value = stats.minimumValue
+        max_value = stats.maximumValue
+
+        myStyle = QgsStyle().defaultStyle()
+        ramp    = myStyle.colorRamp('RdYlGn')
+
+        # Cores extraídas via API — independente do formato interno da versão do QGIS
+        c1_color    = ramp.color1()                        # QColor vermelho (offset 0.0)
+        c2_color    = ramp.color2()                        # QColor verde    (offset 1.0)
+        stop_colors = [s.color for s in ramp.stops()]      # [QColor@0.25, QColor@0.5, QColor@0.75]
+
+        if '2_ZM' in Output_Layer_Name:
+            number_classes = self.dlg.spinBox_ZM_NrZonas.value()
+        else:
+            number_classes = 5
+
+        interval = (max_value - min_value) / (number_classes - 1)
+        soma     = min_value
+        classes  = []
+        for i in range(number_classes):
+            classes.append(round(soma, 10))
+            soma += interval
+
+        if number_classes == 2:
+
+            color_list = [ QgsColorRampShader.ColorRampItem(classes[0], c1_color,       '%.1f' % classes[0]),
+                           QgsColorRampShader.ColorRampItem(classes[1], c2_color,       '%.1f' % classes[1]) ]
+
+        elif number_classes == 3:
+
+            color_list = [ QgsColorRampShader.ColorRampItem(classes[0], c1_color,       '%.1f' % classes[0]),
+                           QgsColorRampShader.ColorRampItem(classes[1], stop_colors[0], '%.1f' % classes[1]),
+                           QgsColorRampShader.ColorRampItem(classes[2], c2_color,       '%.1f' % classes[2]) ]
+
+        elif number_classes == 4:
+
+            color_list = [ QgsColorRampShader.ColorRampItem(classes[0], c1_color,       '%.1f' % classes[0]),
+                           QgsColorRampShader.ColorRampItem(classes[1], stop_colors[0], '%.1f' % classes[1]),
+                           QgsColorRampShader.ColorRampItem(classes[2], stop_colors[1], '%.1f' % classes[2]),
+                           QgsColorRampShader.ColorRampItem(classes[3], c2_color,       '%.1f' % classes[3]) ]
+
+        else:
+
+            color_list = [ QgsColorRampShader.ColorRampItem(classes[0], c1_color,       '%.6f' % classes[0]),
+                           QgsColorRampShader.ColorRampItem(classes[1], stop_colors[0], '%.6f' % classes[1]),
+                           QgsColorRampShader.ColorRampItem(classes[2], stop_colors[1], '%.6f' % classes[2]),
+                           QgsColorRampShader.ColorRampItem(classes[3], stop_colors[2], '%.6f' % classes[3]),
+                           QgsColorRampShader.ColorRampItem(classes[4], c2_color,       '%.6f' % classes[4]) ]
+
+        myRasterShader = QgsRasterShader()
+        myColorRamp    = QgsColorRampShader()
+
+        myColorRamp.setColorRampItemList(color_list)
+        myColorRamp.setColorRampType(QgsColorRampShader.Interpolated)
+        myRasterShader.setRasterShaderFunction(myColorRamp)
+
+        myPseudoRenderer = QgsSingleBandPseudoColorRenderer(layer.dataProvider(), 1, myRasterShader)
+        myPseudoRenderer.setClassificationMax(max_value)
+        myPseudoRenderer.setClassificationMin(min_value)
+
+        layer.setRenderer(myPseudoRenderer)
+        layer.triggerRepaint()
+        
+
+
+
+    def export_shapefile_to_qgis(self, Input_Layer_File_tiff, alg_name):
+
+
+        
+        (Input_Layer_directory, Input_Layer_filename) = os.path.split(Input_Layer_File_tiff)  #'F:/Projetos/QGISProjects/ProjetoBrauna/Smart-Map/1_Krig_CA_Grid_Map_5.tiff'
+        #Input_Layer_directory <- F:/Projetos/QGISProjects/ProjetoBrauna/Smart-Map
+        #Input_Layer_filename  <- 1_Krig_CA_Grid_Map_5.tiff
+
+        Input_Layer_filename = Input_Layer_filename.split(".")                 #separa o nome do arquivo da sua extensão 
+        #Input_Layer_filename[0] <- 1_Krig_CA_Grid_Map_5
+        #Input_Layer_filename[1] <- tiff                
+        
+        if alg_name == "native:pixelstopoints":
+            Output_Layer_File_shp = os.path.join(self.path_absolute , Input_Layer_filename[0] + '_points.shp')
+        else: 
+            Output_Layer_File_shp = os.path.join(self.path_absolute , Input_Layer_filename[0] + '_polygons.shp')
+            
+
+        params = { 'FIELD_NAME'   : self.v_target, 
+                   'INPUT_RASTER' : Input_Layer_File_tiff,  #'F:/Projetos/QGISProjects/ProjetoBrauna/Smart-Map/1_Krig_CA_Grid_Map_5.tiff'
+                   'OUTPUT'       : Output_Layer_File_shp,  #'F:/Projetos/QGISProjects/ProjetoBrauna/Smart-Map/1_Krig_CA_Grid_Map_8_points.shp', 
+                   'RASTER_BAND' : 1 }
+
+
+        #alg_name  #"native:pixelstopolygons"
+                   #"native:pixelstopoints
+
+
+        processing.run(alg_name, params)                
+
+        #para adicionar a layer em uma posição absoluta no QGIS 
+        #create a VectorLayer 
+        if alg_name == "native:pixelstopoints":
+            vlayer = QgsVectorLayer(Output_Layer_File_shp, Input_Layer_filename[0] + '_points', "ogr")
+        else: 
+            vlayer = QgsVectorLayer(Output_Layer_File_shp, Input_Layer_filename[0] + '_polygons', "ogr")
+            
+        # first add the layer without showing it
+        QgsProject.instance().addMapLayer(vlayer, False)        
+        # obtain the layer tree of the top-level group in the project
+        layerTree = self.iface.layerTreeCanvasBridge().rootGroup()
+        # the position is a number starting from 0, with -1 an alias for the end
+        layerTree.insertChildNode(-1, QgsLayerTreeLayer(vlayer))
+
+
+
+
+    #used to create layer resampled of points
+    def export_shapefile_resampled_to_qgis(self, Input_Table, Output_Layer_File_shp, Output_Layer_Name):
 
 
         #Input_Table            = os.path.join(self.path_absolute , '2_ZM_' + self.atributos_ZM + '_Class.csv') # set the filepath for the input CSV
@@ -7800,7 +8787,17 @@ class smart_map:
         lat_field = self.Cord_Y                                                #set the name for the field containing the latitude
         #set the crs as needed  selectedLayer = iface.activeLayer()            #selectedLayer.crs().authid()   ex: 'EPSG:4326'
         selectedLayer = self.dlg.mMapLayerComboBox.currentLayer()
-        crs = selectedLayer.crs().authid()                                     #EPSG:32723  -> pegar so depois de : 
+
+        coordenate_reference = selectedLayer.crs().description()
+        
+        if 'SAD69' in coordenate_reference: 
+            
+            crs = QgsProject.instance().crs().authid()  #get CRS of project   EX: EPSG:32723
+        
+        else:      
+
+            crs = selectedLayer.crs().authid()                                     #EPSG:32723  -> pegar so depois de : 
+                
         crs = crs.split(':')                                                   #gera uma lista:  ['EPSG', '32723'] 
         crs = crs[1]                                                           #segundo elemento da lista: '32723'
          
@@ -7844,291 +8841,5 @@ class smart_map:
         # the position is a number starting from 0, with -1 an alias for the end
         layerTree.insertChildNode(-1, QgsLayerTreeLayer(vlayer))
 
-
-    def export_shapefile_of_polygons_to_qgis(self, Input_Table, Output_Layer_File_shp, Output_Layer_Name):
-
-        print('falta implementar')  
-                
-
-    def export_raster_to_qgis(self, Input_Table, Output_Layer_File_tiff, Output_Layer_Name, z_field):
-
-
-        #Input_Table            =                                   '2_ZM_' + self.atributos_ZM + '_Class.csv'
-        #Output_Layer_File_tiff = os.path.join(self.path_absolute , '2_ZM_' + self.atributos_ZM + '_Class.tiff')
-        #Output_Layer_Name      =                                   '2_ZM_' + self.atributos_ZM
-       
-        filename  = Output_Layer_File_tiff[:-5]           #copia o nome do arquivo, retirando sua extensão: '.tiff'
-        layername = Output_Layer_Name
         
-        cont = 1
-        
-        Output_Layer_File_tiff = filename  + '_' + str(cont) + '.tiff'
-        Output_Layer_Name      = layername + '_' + str(cont)  
-        
-        while os.path.isfile(Output_Layer_File_tiff):     #se já existe o arquivo na pasta, renomeia para:  *_1.tiff', *_2.tiff'...
-            cont = cont + 1
-            Output_Layer_File_tiff = filename  + '_' + str(cont) + '.tiff'
-            Output_Layer_Name      = layername + '_' + str(cont)  
-
-
-
-        # your directory with all your csv files in it
-        dir_with_csvs = os.path.join(self.path_absolute)  #+ '/' 
-        
-        # make it the active directory
-        os.chdir(dir_with_csvs)
-
-        csvfiles = [Input_Table] 
-
-        lon_field = self.Cord_X                         #set the name for the field containing the longitude
-        lat_field = self.Cord_Y                         #set the name for the field containing the latitude
-                  
-        # loop through each CSV file
-        # for each CSV file, make an associated VRT file to be used with gdal_grid command
-        # and then run the gdal_grid util in a subprocess instance
-        for fn in csvfiles:
-            vrt_fn = fn.replace(".csv", ".vrt")
-            lyr_name = fn.replace('.csv', '')
-            out_tif = fn.replace('.csv', '.tiff')
-            with open(vrt_fn, 'w') as fn_vrt:
-                fn_vrt.write('<OGRVRTDataSource>\n')
-                fn_vrt.write('\t<OGRVRTLayer name="%s">\n' % lyr_name)
-                fn_vrt.write('\t\t<SrcDataSource>%s</SrcDataSource>\n' % fn)
-                fn_vrt.write('\t\t<GeometryType>wkbPoint</GeometryType>\n')
-                fn_vrt.write('\t\t<GeometryField encoding="PointFromColumns" x="' + lon_field + '" y="' + lat_field + '" z="' + z_field + '"/>\n')
-                fn_vrt.write('\t</OGRVRTLayer>\n')
-                fn_vrt.write('</OGRVRTDataSource>\n')
-        
-
-                self.Num_Points_X = int((float(self.Cord_X_max) - float(self.Cord_X_min)) / int(self.Pixel_Size_X))         
-                self.Num_Points_Y = int((float(self.Cord_Y_max) - float(self.Cord_Y_min)) / int(self.Pixel_Size_Y))         
-                
-                Pixel_Size_X = int(self.Pixel_Size_X) 
-                Num_Points_X = int(self.Num_Points_X) 
-                Cord_X_min   = self.Cord_X_min 
-                Cord_X_max   = (Pixel_Size_X * Num_Points_X) + Cord_X_min 
-
-                Pixel_Size_Y = int(self.Pixel_Size_Y) 
-                Num_Points_Y = int(self.Num_Points_Y) 
-                Cord_Y_min   = self.Cord_Y_min 
-                Cord_Y_max   = (Pixel_Size_Y * Num_Points_Y) + Cord_Y_min      #ajustar Cord_Y_max  para que o tamanho do pixel fique com valor exato de 5m. 
-
-           
-            if '2_ZM' in Output_Layer_File_tiff:   #para ZM utiliza interpolador do vizinho mais proximo -> não interpola, pega apenas o vizinho + proximo    
-                gdal_cmd = 'gdal_grid -a nearest:radius1=0.0:radius2=0.0:angle=0.0:nodata=0.0 -zfield "' + z_field + '"' + ' -txe ' + str(self.Cord_X_min) + ' ' + str(Cord_X_max) +  ' -tye ' + str(self.Cord_Y_min) + ' ' + str(Cord_Y_max) + ' -outsize ' + str(self.Num_Points_X) + ' ' + str(self.Num_Points_Y) + ' -ot UInt16 -of GTiff -l %s %s %s' % (lyr_name, vrt_fn, out_tif)
-            else: 
-                #sem metodo interpolador 
-                #comand_gdal = 'gdal_grid -zfield "' + z_field + '"' + ' -txe ' + str(self.Cord_X_min) + ' ' + str(self.Cord_X_max) +  ' -tye ' + str(self.Cord_Y_min) + ' ' + str(self.Cord_Y_max) + ' -tr 5.0 5.0' + ' -ot Float32 -of GTiff  -l %s %s %s' % (lyr_name, vrt_fn, out_tif) 
-                comand_gdal = 'gdal_grid -zfield "' + z_field + '"' + ' -txe ' + str(self.Cord_X_min) + ' ' + str(Cord_X_max) +  ' -tye ' + str(self.Cord_Y_min) + ' ' + str(Cord_Y_max) + ' -outsize ' + str(self.Num_Points_X) + ' ' + str(self.Num_Points_Y) + ' -ot Float64 -of GTiff -l %s %s %s' % (lyr_name, vrt_fn, out_tif) 
-
-                gdal_cmd = comand_gdal
-                
-         
-            subprocess.call(gdal_cmd, shell=True)  #criar arquivo .tiff   (arquivo sem area de contorno)
-
-
-        #######################################################################
-        #fazer o recorte do raster de acordo com o limite de contorno     
-
-
-            #(não marcou area de contorno)                   ou  (marcou area de contorno                       e   não definiu a layer de contorno) 
-        if (not self.dlg.checkBox_Area_Contorno.isChecked()) or ((self.dlg.checkBox_Area_Contorno.isChecked()) and (self.dlg.mMapLayerComboBox_AreaCont.currentIndex() < 0)): 
-
-            #para criar e registrar uma  Rasterlayer no QGIS, adiciona apos a layer corrente selecionada 
-            #self.iface.addRasterLayer(out_tif, lyr_name)                       
-
-            #para adicionar a layer em uma posição absoluta no QGIS 
-            #create a RasterLayer 
-            rlayer = QgsRasterLayer(out_tif, lyr_name)
-            # first add the layer without showing it
-            QgsProject.instance().addMapLayer(rlayer, False)
-            # obtain the layer tree of the top-level group in the project
-            layerTree = self.iface.layerTreeCanvasBridge().rootGroup()
-            # the position is a number starting from 0, with -1 an alias for the end
-            layerTree.insertChildNode(-1, QgsLayerTreeLayer(rlayer))
-            self.define_raster_color_ramp(rlayer, Output_Layer_Name)
-
-
-            #set CRS da layer RasterLayer 
-            rasterLayer = self.iface.activeLayer()
-            projectLayer = self.dlg.mMapLayerComboBox.currentLayer()
-            crs = projectLayer.crs().authid()  #EPSG:32723  -> pegar so depois de: 
-            crs = crs.split(':')               #gera uma lista:  ['EPSG', '32723'] 
-            crs = crs[1]                       #segundo elemento da lista: '32723'
-            CRS = QgsCoordinateReferenceSystem()
-            CRS.createFromSrid(int(crs))
-            rasterLayer.setCrs(CRS)
-            rasterLayer.crs().postgisSrid()
-            
-
-            #recortar o arquivo raster (.tiff)  manualmente dentro do QGIS 
-
-            #usar o QGIS ->  ir em Raster -> Extraction  -> Clip Raster by Mask Layer 
-            #escolher a Input Layer (Layer Raster)
-            #escolher a Mask Layer  (Poligono de Contorno)
-            #escolher o Source CRS 
-            #escolher o Target CRS 
-            #Assign a specified nodata value to output bands ->  para excluir a área fora do poligono -> colocar -999999999.000000                
-
-        else:  #usuário marcou area de contorno                  
-
-            if self.dlg.mMapLayerComboBox_AreaCont.currentIndex() >=  0: #usuário definiu poligono para recorte da layerRaster    
-
-                #recortar o arquivo raster (.tiff)  usando uma layer = polygonLayer 
-                Input_Layer_File_tiff  = out_tif                                                #r"C:\Users\Gustavo\Documents\QGISProjects\ProjetoAraponga\2_ZM_K_Class.tiff"         
-                Input_Layer_Poligon    = self.dlg.mMapLayerComboBox_AreaCont.currentLayer()     #r"C:\Users\Gustavo\Documents\QGISProjects\ProjetoAraponga\Limite_Area_Poligono.shp" 
-                crs = Input_Layer_Poligon.crs().authid()                                        #EPSG:32723  
-    
-                #if os.path.isfile(output_raster):
-                #   os.remove(output_raster)
-                    
-                if not os.path.isfile(Input_Layer_File_tiff):
-                    print ("File doesn't exists", Input_Layer_File_tiff)
-                    return None
-                else:
-                    params = {'INPUT': Input_Layer_File_tiff,
-                              'MASK': Input_Layer_Poligon,
-                              'SOURCE_CRS': crs, #'EPSG:32723',
-                              'TARGET_CRS': crs, 
-                              'NODATA': -999999999.0,
-                              'ALPHA_BAND': False,
-                              'CROP_TO_CUTLINE': True,
-                              #'KEEP_RESOLUTION': True,
-                              #'OPTIONS': 'COMPRESS=LZW',  
-                              #'DATA_TYPE': 0,  # Byte
-                              'OUTPUT': Output_Layer_File_tiff,
-                              }
-            
-                    feedback = QgsProcessingFeedback()
-                    alg_name = 'gdal:cliprasterbymasklayer'
-                    #alg_name = 'saga:kmeansclusteringforgrids'
-                    #print(processing.algorithmHelp(alg_name))  #imprime o Help do comando 
-                    processing.run(alg_name, params, feedback=feedback)
-    
-                    #para criar e registrar uma  Rasterlayer no QGIS, adiciona apos a layer corrente selecionada 
-                    #self.iface.addRasterLayer(Output_Layer_File_tiff, Output_Layer_Name)  
-                         
-                    #para adicionar a layer em uma posição absoluta no QGIS 
-                    #create a RasterLayer 
-                    rlayer = QgsRasterLayer(Output_Layer_File_tiff, Output_Layer_Name)
-                    # first add the layer without showing it
-                    QgsProject.instance().addMapLayer(rlayer, False)
-                    # obtain the layer tree of the top-level group in the project
-                    layerTree = self.iface.layerTreeCanvasBridge().rootGroup()
-                    # the position is a number starting from 0, with -1 an alias for the end
-                    layerTree.insertChildNode(-1, QgsLayerTreeLayer(rlayer))
-                    self.define_raster_color_ramp(rlayer, Output_Layer_Name)
-
-
-    def define_raster_color_ramp(self, layer, Output_Layer_Name):
-
-
-       
-        #renderer = layer.renderer()
-        provider = layer.dataProvider()
-        
-        #band = renderer.usesBands()
-       
-        #min_value = provider.bandStatistics(band[0], QgsRasterBandStats.All).minimumValue
-        #max_value = provider.bandStatistics(band[0], QgsRasterBandStats.All).maximumValue
-
-        extent = layer.extent()
-        
-        stats = provider.bandStatistics(1, QgsRasterBandStats.All,extent, 0)
-        
-        if (stats.minimumValue < 0):
-           min_value = 0  
-        
-        else: 
-            min_value = stats.minimumValue
-
-        
-        max_value = stats.maximumValue
-        
-        #print ("min: {:.1f}, max: {:.1f}".format(min_value, max_value))
-        
-        myStyle = QgsStyle().defaultStyle()
-        
-        ramp_names = myStyle.colorRampNames()
-        
-        dict = {}
-        
-        for i, name in enumerate(ramp_names):
-            dict[ramp_names[i]] = i 
-        
-        #print('RdYlGn ramp is number:', dict['RdYlGn'])
-        
-        ramp = myStyle.colorRamp('RdYlGn')                                     #RdYlGn ramp
-        #print(ramp_names[dict['RdYlGn']])
-        
-        rp = ramp.properties()
-        
-        
-        #To set an interpolated color RdYlGn ramp shader with five classes
-        if '2_ZM' in Output_Layer_Name:
-            number_classes = self.dlg.spinBox_ZM_NrZonas.value()
-        else:     
-            number_classes = 5
-        
-        interval = (max_value - min_value)/(number_classes -1 )
-        
-        #classes
-        soma = min_value
-        classes = []
-        
-        for i in range(number_classes):
-            tmp = round(soma, 10)
-            #print('class {:d}: {:d}'.format(i+1, tmp))
-            classes.append(tmp)
-            soma += interval
-
-        
-        c1 = [ int(element) for element in rp['color1'].split(',') ]           #first color  Ex: red
-        stops = [ element for element in re.split('[,;:]', rp['stops']) ]      #intermediate colors 
-        c2 = [ int(element) for element in rp['color2'].split(',') ]           #last color   Ex: green 
-
-        
-        if number_classes == 2: 
-
-            color_list = [ QgsColorRampShader.ColorRampItem(classes[0], QColor(c1[0],c1[1],c1[2], c1[3]), '%.1f' % classes[0] ),
-                           QgsColorRampShader.ColorRampItem(classes[1], QColor(c2[0],c2[1],c2[2], c2[3]), '%.1f' % classes[1]) ]
-            
-        elif number_classes == 3:     
-        
-            color_list = [ QgsColorRampShader.ColorRampItem(classes[0], QColor(c1[0],c1[1],c1[2], c1[3]), '%.1f' % classes[0] ),
-                           QgsColorRampShader.ColorRampItem(classes[1], QColor(int(stops[1]),int(stops[2]),int(stops[3]),int(stops[4])), '%.1f' % classes[1]),
-                           QgsColorRampShader.ColorRampItem(classes[2], QColor(c2[0],c2[1],c2[2], c2[3]), '%.1f' % classes[2]) ]
-
-
-        elif number_classes == 4:     
-        
-            color_list = [ QgsColorRampShader.ColorRampItem(classes[0], QColor(c1[0],c1[1],c1[2], c1[3]), '%.1f' % classes[0] ),
-                           QgsColorRampShader.ColorRampItem(classes[1], QColor(int(stops[1]),int(stops[2]),int(stops[3]),int(stops[4])), '%.1f' % classes[1]),
-                           QgsColorRampShader.ColorRampItem(classes[2], QColor(int(stops[6]),int(stops[7]),int(stops[8]),int(stops[9])), '%.1f' % classes[2]),
-                           QgsColorRampShader.ColorRampItem(classes[3], QColor(c2[0],c2[1],c2[2], c2[3]), '%.1f' % classes[3]) ]
-
-        else: 
-            
-            color_list = [ QgsColorRampShader.ColorRampItem(classes[0], QColor(c1[0],c1[1],c1[2], c1[3]), '%.6f' % classes[0] ),
-                           QgsColorRampShader.ColorRampItem(classes[1], QColor(int(stops[1]),int(stops[2]),int(stops[3]),int(stops[4])), '%.6f' % classes[1]),
-                           QgsColorRampShader.ColorRampItem(classes[2], QColor(int(stops[6]),int(stops[7]),int(stops[8]),int(stops[9])), '%.6f' % classes[2]),
-                           QgsColorRampShader.ColorRampItem(classes[3], QColor(int(stops[11]),int(stops[12]),int(stops[13]),int(stops[14])), '%.6f' % classes[3]),
-                           QgsColorRampShader.ColorRampItem(classes[4], QColor(c2[0],c2[1],c2[2], c2[3]), '%.6f' % classes[4]) ]
-            
-
-        myRasterShader = QgsRasterShader()
-        myColorRamp = QgsColorRampShader()
-        
-        myColorRamp.setColorRampItemList(color_list)
-        myColorRamp.setColorRampType(QgsColorRampShader.Interpolated)
-        myRasterShader.setRasterShaderFunction(myColorRamp)
-        
-        myPseudoRenderer = QgsSingleBandPseudoColorRenderer(layer.dataProvider(), 1,  myRasterShader)
-        
-        layer.setRenderer(myPseudoRenderer)
-
-       
-        
-        layer.triggerRepaint()    
                                 
-############################################################    Aba para otimização  #################################################################              

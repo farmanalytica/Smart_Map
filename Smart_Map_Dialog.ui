@@ -48,9 +48,9 @@
      <property name="geometry">
       <rect>
        <x>10</x>
-       <y>208</y>
+       <y>237</y>
        <width>700</width>
-       <height>400</height>
+       <height>371</height>
       </rect>
      </property>
     </widget>
@@ -150,7 +150,7 @@
        <x>10</x>
        <y>8</y>
        <width>700</width>
-       <height>90</height>
+       <height>121</height>
       </rect>
      </property>
      <property name="title">
@@ -182,7 +182,7 @@
        </rect>
       </property>
       <property name="text">
-       <string>C:\Program Files\QGIS 3.16\bin</string>
+       <string>C:\Program Files\QGIS 3.22\bin</string>
       </property>
       <property name="readOnly">
        <bool>true</bool>
@@ -204,17 +204,17 @@
        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
       </property>
      </widget>
-     <widget class="QCheckBox" name="checkBox_Qgis_Vector">
+     <widget class="QCheckBox" name="checkBox_Qgis_Vector_Points">
       <property name="geometry">
        <rect>
-        <x>182</x>
-        <y>60</y>
-        <width>160</width>
+        <x>40</x>
+        <y>90</y>
+        <width>291</width>
         <height>17</height>
        </rect>
       </property>
       <property name="text">
-       <string>Exportar ShapeFile</string>
+       <string>Exportar ShapeFile de Pontos</string>
       </property>
       <property name="checked">
        <bool>false</bool>
@@ -252,12 +252,28 @@
        <bool>false</bool>
       </property>
      </widget>
+     <widget class="QCheckBox" name="checkBox_Qgis_Vector_Polygons">
+      <property name="geometry">
+       <rect>
+        <x>345</x>
+        <y>90</y>
+        <width>291</width>
+        <height>17</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Exportar ShapeFile de Poligonos</string>
+      </property>
+      <property name="checked">
+       <bool>false</bool>
+      </property>
+     </widget>
     </widget>
     <widget class="QGroupBox" name="groupBox_2">
      <property name="geometry">
       <rect>
        <x>10</x>
-       <y>107</y>
+       <y>140</y>
        <width>700</width>
        <height>91</height>
       </rect>
@@ -342,7 +358,7 @@
      <widget class="QLabel" name="label_CRS_Layer">
       <property name="geometry">
        <rect>
-        <x>129</x>
+        <x>130</x>
         <y>55</y>
         <width>241</width>
         <height>20</height>
@@ -368,7 +384,7 @@
        </rect>
       </property>
       <property name="text">
-       <string>Eliminar Outiliers</string>
+       <string>Eliminar Outliers</string>
       </property>
       <property name="checked">
        <bool>true</bool>
@@ -1503,13 +1519,32 @@
        <property name="geometry">
         <rect>
          <x>540</x>
-         <y>167</y>
+         <y>180</y>
          <width>120</width>
          <height>25</height>
         </rect>
        </property>
        <property name="text">
         <string>Interpolar...</string>
+       </property>
+      </widget>
+      <widget class="QCheckBox" name="checkBox_Krigagem_Std_Desv">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="geometry">
+        <rect>
+         <x>500</x>
+         <y>160</y>
+         <width>221</width>
+         <height>17</height>
+        </rect>
+       </property>
+       <property name="layoutDirection">
+        <enum>Qt::LeftToRight</enum>
+       </property>
+       <property name="text">
+        <string>Gerar Mapa Desvio Padrão</string>
        </property>
       </widget>
      </widget>

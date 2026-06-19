@@ -147,7 +147,8 @@ class OrdinaryKriging:
         
         """
         #forma vetor nx2
-        xy = np.concatenate((self.x[:, np.newaxis], self.y[:, np.newaxis]), axis=1 )
+        xy = np.concatenate((self.x.to_numpy(float)[:, np.newaxis], self.y.to_numpy(float)[:, np.newaxis]), axis=1 )
+
         self.xy=xy
         #forma vetor de distancias nxn
         d = cdist(xy, xy, "euclidean")
@@ -201,12 +202,24 @@ class OrdinaryKriging:
         #distance_upper_bound, maxima distancia para achar vizinhos
         #query completa a matriz idx com o comprimento do vetor de pontos
         #experimentais, quanto não acha k vizinhos no raio definido
-        dist_all,ids_all=tree.query(xypts,k=self.n_closest_points,p=2, 
-                        distance_upper_bound=self.radius, n_jobs=-1)
+
+        #dist_all,ids_all=tree.query(xypts,k=self.n_closest_points,p=2, 
+        #                distance_upper_bound=self.radius, n_jobs=-1)     #funciona para as versões anteriores ao QGIS 3.28 
         
+        #dist_all,ids_all=tree.query(xypts,k=self.n_closest_points,p=2, 
+        #                distance_upper_bound=self.radius, workers=-1)    #funciona a partir da versão ao QGIS 3.28 
+        
+        dist_all,ids_all=tree.query(xypts,k=self.n_closest_points,p=2, 
+                        distance_upper_bound=self.radius)                 #remoção do parametro workers 
+
+
         #calculada para 4 vizinhos, sem considerar radio de busca
         #Consume menos tempo de processamento
-        dist_4n,ids_4n=tree.query(xypts,k=4,p=2,n_jobs=-1)
+        
+        #dist_4n,ids_4n=tree.query(xypts,k=4,p=2,workers=-1)             
+        
+        dist_4n,ids_4n=tree.query(xypts,k=4,p=2)                         #remoção do parametro workers  
+
         
         #para cada ponto da grade
         for i in range(npt):
@@ -257,7 +270,19 @@ class OrdinaryKriging:
                 b[zero_index[0], 0] = 0.0
             b[n_neig, 0] = 1.0
             
-            x = scipy.linalg.solve(a, b)
+            # calculating the determinant of matrix
+            det_a = np.linalg.det(a)            
+            #print(det_a)
+            #determinante igual a zero não consegue inverter a matriz 
+            #logo irá gerar erro: numpy.linalg.LinAlgError: Singular matrix Error
+            #para resolver usar solução dos mínimos quadrados: 
+            #https://stackoverflow.com/questions/64527098/numpy-linalg-linalgerror-singular-matrix-error-when-trying-to-solve
+            if det_a == 0:  
+              x = np.linalg.lstsq(a, b, rcond=None)[0]
+            else: 
+              #x = np.linalg.lstsq(a, b, rcond=None)[0]  
+              x = scipy.linalg.solve(a, b)
+
             zvalues[i] = x[:n_neig, 0].dot(self.z[ids])
             sigmasq[i] = -x[:, 0].dot(b[:, 0])
    

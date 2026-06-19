@@ -140,7 +140,7 @@ class Semivariogram:
 
         
         #
-        self.lag=lag.to_numpy() #convert pandas series to numpy
+        self.lag=lag.to_numpy()     #convert pandas series to numpy
         self.gamma=gamma.to_numpy() #convert pandas series to numpy
         
         
@@ -164,6 +164,10 @@ class Semivariogram:
         r2 é o coeficiente de determinação
         
         """
+
+        #Nugget = self.models[self.model][0]
+        #Range  = self.models[self.model][1]
+        #Sill   = self.models[self.model][2]
         
         func=self.variogram_dict[model]
         

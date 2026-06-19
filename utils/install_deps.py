@@ -17,11 +17,13 @@
  ***************************************************************************/
 """
 
+
 import os 
 import sys
 import platform
 import subprocess
 import zipfile
+import shutil  
 
 #import pathlib
 #import pip
@@ -32,16 +34,7 @@ from qgis.PyQt.QtWidgets import QMessageBox
 #from qgis.PyQt import QtCore
 
 
-system = platform.system()  #[Windows, Linux, Darwin]
-print('\nOperation System:', system)
-
-#if system == 'Windows':
-#    plugin_dir = pathlib.Path(__file__).parent
-#    sys.path.append(plugin_dir)
-
-
 requirements=["scipy", "pandas", "scikit-learn", "pyKrige", "pysal", "scikit-fuzzy", "scikit-optimize"]
-
 
 
 #dica web para instalar external libs 
@@ -70,20 +63,32 @@ requirements=["scipy", "pandas", "scikit-learn", "pyKrige", "pysal", "scikit-fuz
 
 #from platform import python_version
 #print(python_version())
-#Saida: 3.7.0
+#Saida: 3.9.5
 
 
 #Table of Python and QGIS Versions 
-#QGIS 3.10.12                     -> Python 3.7.0
-#QGIS 3.16.9 (Instalador .EXE)    -> Python 3.7.0
-#QGIS 3.16.9 (Instalador .MSI)    -> Python 3.9.5
+
+#QGIS 3.10.12                      -> Python 3.7.0
+
+#QGIS 3.16.16 (Instalador .EXE)    -> Python 3.7.0
+#QGIS 3.16.16 (Instalador .MSI)    -> Python 3.9.5
+
+#QGIS 3.22.4  (Instalador .MSI)    -> Python 3.9.5
+
+#QGIS 3.28.4  (Instalador .MSI)    -> Python 3.9.5
+
+#QGIS 3.34.4  (Instalador .MSI)    -> Python 3.9.18
+#QGIS 3.34.6  (Instalador .MSI)    -> Python 3.12.4
+
+#QGIS 3.40.4  (Instalador .MSI)    -> Python 3.12.9
+
 
 
 ###check QGIS Version  
 
 #import qgis.utils
 #qgis.utils.Qgis.QGIS_VERSION
-#Saida: '3.16.3-Hannover'
+#Saida: '3.28.4-Firenze'
 
 
 #Windows 
@@ -116,20 +121,32 @@ requirements=["scipy", "pandas", "scikit-learn", "pyKrige", "pysal", "scikit-fuz
 #/Applications/QGIS-LTR.app/Contents/MacOS/lib/python3.8/site-packages                                 #local de instalação das libs do plugin via terminal MacOS
 
 
+#pastas para serem apagadas antes de instalar o QGIS
+
+#C:\Users\gusta\AppData\Roaming\Python
+#C:\Users\gusta\AppData\Roaming\QGIS
+
 def unzip_external_package(qgis_python_version, library_name, path_to_zip_file, directory_to_extract_to): 
 
     
     print('uncompressing:', library_name) 
 
-    if "v3.9" in qgis_python_version:  	#Python 3.9 
-
-        with zipfile.ZipFile(os.path.join(path_to_zip_file, library_name + '39.zip'), 'r') as zip_ref:
-            zip_ref.extractall(directory_to_extract_to)
-
-    else:                               #Python 3.7 or 3.8 
+    if "3.7" in qgis_python_version:  	#Python 3.7 or 3.8  
 
         with zipfile.ZipFile(os.path.join(path_to_zip_file, library_name + '37.zip'), 'r') as zip_ref:
             zip_ref.extractall(directory_to_extract_to)
+
+    else: 
+    
+        if "3.9" in qgis_python_version:  	#Python 3.9 
+
+            with zipfile.ZipFile(os.path.join(path_to_zip_file, library_name + '39.zip'), 'r') as zip_ref:
+                zip_ref.extractall(directory_to_extract_to)
+
+        else:                               #Python 3.12  
+
+            with zipfile.ZipFile(os.path.join(path_to_zip_file, library_name + '312.zip'), 'r') as zip_ref:
+                zip_ref.extractall(directory_to_extract_to)
 	
 
 
@@ -137,21 +154,36 @@ def load_external_package(qgis_python_version, library_name, library_version, ex
 
     
     directory_to_extract_to = os.path.dirname(os.path.abspath(__file__))              #C:\Users\Gustavo\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\Smart_Map\utils
+
     if unzip == False: 
 	    directory_to_extract_to = directory_to_extract_to[:-5]                        #C:\Users\Gustavo\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\Smart_Map\
     else: 
 	    directory_to_extract_to = directory_to_extract_to[:-23]                       #C:\Users\Gustavo\AppData\Roaming\QGIS\QGIS3\profiles\default\python\
+
 	
     directory_to_extract_to = os.path.join(directory_to_extract_to, 'site-packages')  #C:\Users\Gustavo\AppData\Roaming\QGIS\QGIS3\profiles\default\python\site-packages           
     print('directory_to_extract_to', directory_to_extract_to)
+
 
     
     #if first execute, unzip the folder sklearn
     if (int(exec_number) == 0) and (unzip == True):
 
+
+        if os.path.isdir(directory_to_extract_to):  #check if directory existys -> if true drop old directory 
+    
+          
+            # Try to remove the tree; if it fails, throw an error using try...except.
+            try:
+                shutil.rmtree(directory_to_extract_to)
+            except OSError as e:
+                print("Error: %s - %s." % (e.filename, e.strerror)) 
+    
+
         path_to_zip_file = os.path.dirname(os.path.abspath(__file__))                 #C:\Users\Gustavo\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\Smart_Map\utils
         path_to_zip_file = path_to_zip_file[:-5]                                      #C:\Users\Gustavo\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\Smart_Map\
         print('path_to_zip_file', path_to_zip_file)
+
 
         unzip_external_package(qgis_python_version, library_name, path_to_zip_file, directory_to_extract_to)
 
@@ -162,8 +194,160 @@ def load_external_package(qgis_python_version, library_name, library_version, ex
 
 
 
+#check Operational System 
 
-def install_external_package(library_name, library_version, exec_number, unzip): 
+system = platform.system()  #[Windows, Linux, Darwin]
+print("\nOperation System:", system)
+
+#if system == 'Windows':
+#    plugin_dir = pathlib.Path(__file__).parent
+#    sys.path.append(plugin_dir)
+
+
+
+#check QGIS Version 
+import qgis.utils
+
+print("\nQGIS Version:", qgis.utils.Qgis.QGIS_VERSION) 
+
+
+#check Python Version
+qgis_python_version = sys.version 
+
+print("\nQGIS python Version:", qgis_python_version)
+
+
+###check QGIS (32 or 64 bits) and Python Version
+
+#import sys
+#sys.version
+
+#Saida: '3.7.0 (v3.7.0:1bf9cc5093  , Jun 27 2018, 04:59:51) [MSC v.1914 64 bit (AMD64)]'   #instalador .exe
+#Saida: '3.7.0 (v3.7.0:1bf9cc5093  , Jun 27 2018, 04:06:47) [MSC v.1914 32 bit (Intel)]'   #instalador .exe
+#Saida: '3.9.5 (tags/v3.9.5:0a7dcbd, May  3 2021, 17:27:52) [MSC v.1928 64 bit (AMD64)]'   #instalador .msi
+#Saida: '3.10.9(tags/v3.10.9       , Mar  1 2023, 18:18:15) [MSC v.1916 64 bit (AMD64)]'   #instalador .msi
+#Saida: '3.9.18 (heads/master:5eba59e, Feb  1 2024, 20:02:10) [MSC v.1929 64 bit (AMD64)]' #instalador .msi
+#Saida: '3.12.4 (main, Jun 10 2024, 12:48:35) [MSC v.1938 64 bit (AMD64)]'			
+
+#check qgis architecture 
+qgis_architecture   = sys.version  
+
+
+if "32 bit" in qgis_architecture: 
+
+    print("\nQGIS architecture: 32 bit")	
+
+    msg_box = QMessageBox()
+    msg_box.setIcon(QMessageBox.Warning)
+    msg_box.setText('This plugin only works on QGIS 64-bit. Please install 64-bit QGIS before installing the plugin.')
+    msg_box.exec_()
+
+else: 	
+	
+    print("\nQGIS archtecture: 64 bit")	
+		
+
+    #check dependencies of librarys installeds 
+    
+    print("\nChecking dependencies!")
+
+
+	#scipy
+    try:
+        import scipy
+        print("scipy        already installed. version: " + scipy.__version__ + "  Locale:" + scipy.__file__)    
+
+        #QGIS 3.34 - scipy = 1.13.0
+
+	#except ModuleNotFoundError: 
+    except Exception:
+
+        msg_box = QMessageBox()
+        msg_box.setIcon(QMessageBox.Warning)
+        msg_box.setText('scipy library not found. Please go to github: https://github.com/gustavowillam/SmartMapPlugin and see how to install python libraries.')
+        msg_box.exec_()
+
+
+	#pandas
+    try:
+        import pandas
+        print("pandas       already installed. version: " + pandas.__version__ + "  Locale:" + pandas.__file__)    
+
+        #QGIS 3.34 - pandas = 2.2.2
+
+
+	#except ModuleNotFoundError: 
+    except Exception:
+
+        msg_box = QMessageBox()
+        msg_box.setIcon(QMessageBox.Warning)
+        msg_box.setText('pandas library not found. Please go to github: https://github.com/gustavowillam/SmartMapPlugin and see how to install python libraries.')
+        msg_box.exec_()
+
+
+
+	#sklearn 
+    try:
+        import sklearn
+        print("scikit-learn already installed. version: " + sklearn.__version__ + " Locale:" + sklearn.__file__)    
+
+        #QGIS 3.34 - sklearn = 1.5.1
+
+
+	#except ModuleNotFoundError: 
+    except Exception:
+
+        file_dir = os.path.dirname(os.path.abspath(__file__))                               #get the directory of currenty file python in execute
+
+        if os.path.isfile(os.path.join(file_dir, 'execute_number.txt')): 
+            f = open(os.path.join(file_dir, 'execute_number.txt'), 'r')        
+            exec_number = f.read()
+            f.close()     
+        else: 
+            f = open(os.path.join(file_dir, 'execute_number.txt'), 'w')        
+            exec_number = 0    
+            f.write(str(exec_number))          
+            f.close()             
+
+
+        if "v3.12" in qgis_python_version:
+            requirements=["scikit-learn==1.5.1"]
+        else: 
+           if "3.9" in qgis_python_version:
+              requirements=["scikit-learn==0.24.2"]
+           else: 
+              requirements=["scikit-learn==0.22.2"]
+        
+        dep = requirements[0]
+
+
+		#install_external_package('sklearn', dep, exec_number, unzip=True)                  #SO Linux / MacOS devem instalar manualmente as dependencias 
+
+        if system == 'Windows':                                                             #install if SO is Windows, else user must install sklearn via cmd.   
+            load_external_package(qgis_python_version, 'sklearn', dep, exec_number, unzip=True)
+
+        else:        
+
+            msg_box = QMessageBox()
+            msg_box.setIcon(QMessageBox.Warning)
+            msg_box.setText('sklearn library not found. Please go to github: https://github.com/gustavowillam/SmartMapPlugin and see how to install python libraries.')
+            msg_box.exec_()
+			
+			
+    print("Dependencies checked!")
+
+
+	#else: #Linux or macOS
+	#main.main(['install', dep])
+	#pip.main( ['install', dep])               
+	#main(['install', dep])
+	#subprocess.check_call(["python", '-m', 'pip', 'install', '--user', library_version]) 
+	#pip.main(['install', library_version])
+
+
+
+
+def install_external_package(library_name, library_version, exec_number, unzip):     #para SO Linux / MacOS  
     
         
 	if int(exec_number) == 0: 
@@ -188,115 +372,3 @@ def install_external_package(library_name, library_version, exec_number, unzip):
 
 			#if not install, load the folder sklearn
 			load_external_package(qgis_python_version, library_name, library_version, exec_number, unzip)
-
-
-###check QGIS (32 or 64 bits) and Python Version
-#import sys
-#sys.version
-#Saida: '3.7.0 (v3.7.0:1bf9cc5093, Jun 27 2018, 04:59:51) [MSC v.1914 64 bit (AMD64)]'     #instalador .exe
-#Saida: '3.7.0 (v3.7.0:1bf9cc5093, Jun 27 2018, 04:06:47) [MSC v.1914 32 bit (Intel)]'     #instalador .exe
-#Saida: '3.9.5 (tags/v3.9.5:0a7dcbd, May  3 2021, 17:27:52) [MSC v.1928 64 bit (AMD64)]'   #instalador .msi
-
-			
-
-#check qgis architecture 
-qgis_architecture   = sys.version  
-#check Python Version
-qgis_python_version = sys.version 
-
-
-if "32 bit" in qgis_architecture: 
-
-    print("\nQGIS 32 bit")	
-
-    msg_box = QMessageBox()
-    msg_box.setIcon(QMessageBox.Warning)
-    msg_box.setText('This plugin only works on QGIS 64-bit. Please install 64-bit QGIS before installing the plugin.')
-    msg_box.exec_()
-
-else: 	
-	
-	print("\nQGIS 64 bit")	
-		
-	print("\nChecking dependencies!")
-
-
-	#scipy
-	try:
-		import scipy
-		print("scipy        already installed. version: " + scipy.__version__ + "  Locale:" + scipy.__file__)    
-
-	#except ModuleNotFoundError: 
-	except Exception:
-
-		msg_box = QMessageBox()
-		msg_box.setIcon(QMessageBox.Warning)
-		msg_box.setText('scipy library not found. Please go to github: https://github.com/gustavowillam/SmartMapPlugin and see how to install python libraries.')
-		msg_box.exec_()
-
-
-	#pandas
-	try:
-		import pandas
-		print("pandas       already installed. version: " + pandas.__version__ + "  Locale:" + pandas.__file__)    
-
-	#except ModuleNotFoundError: 
-	except Exception:
-
-		msg_box = QMessageBox()
-		msg_box.setIcon(QMessageBox.Warning)
-		msg_box.setText('pandas library not found. Please go to github: https://github.com/gustavowillam/SmartMapPlugin and see how to install python libraries.')
-		msg_box.exec_()
-
-
-
-	#sklearn 
-	try:
-		import sklearn
-		print("scikit-learn already installed. version: " + sklearn.__version__ + " Locale:" + sklearn.__file__)    
-
-	#except ModuleNotFoundError: 
-	except Exception:
-
-		file_dir = os.path.dirname(os.path.abspath(__file__))                               #get the directory of currenty file python in execute
-
-		if os.path.isfile(os.path.join(file_dir, 'execute_number.txt')): 
-			f = open(os.path.join(file_dir, 'execute_number.txt'), 'r')        
-			exec_number = f.read()
-			f.close()     
-		else: 
-			f = open(os.path.join(file_dir, 'execute_number.txt'), 'w')        
-			exec_number = 0    
-			f.write(str(exec_number))          
-			f.close()             
-
-		if "v3.9" in qgis_python_version:
-			requirements=["scikit-learn==0.24.2"]
-		else: 
-			requirements=["scikit-learn==0.22.2"]
-
-		dep = requirements[0]
-
-
-		#install_external_package('sklearn', dep, exec_number, unzip=True)
-
-		if system == 'Windows':                                                             #install if SO is Windows, else user must install sklearn via cmd.   
-			load_external_package(qgis_python_version, 'sklearn', dep, exec_number, unzip=True)
-
-		else:        
-
-			msg_box = QMessageBox()
-			msg_box.setIcon(QMessageBox.Warning)
-			msg_box.setText('sklearn library not found. Please go to github: https://github.com/gustavowillam/SmartMapPlugin and see how to install python libraries.')
-			msg_box.exec_()
-			
-			
-	print("Dependencies checked!")
-
-
-	#else: #Linux or macOS
-	#main.main(['install', dep])
-	#pip.main( ['install', dep])               
-	#main(['install', dep])
-	#subprocess.check_call(["python", '-m', 'pip', 'install', '--user', library_version]) 
-	#pip.main(['install', library_version])

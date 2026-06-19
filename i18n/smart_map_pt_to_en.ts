@@ -95,8 +95,12 @@
         <translation>Export Layers to QGIS</translation>
     </message>
     <message>
-        <source>Exportar ShapeFile</source>
-        <translation>Export ShapeFile</translation>
+        <source>Exportar ShapeFile de Pontos</source>
+        <translation>Export ShapeFile of Points</translation>
+    </message>
+    <message>
+        <source>Exportar ShapeFile de Poligonos</source>
+        <translation>Export ShapeFile of Polygons</translation>
     </message>
     <message>
         <source>Exportar Raster</source>
@@ -907,6 +911,14 @@
     <message>
         <source>Eliminar Outliers</source>
         <translation>Eliminate Outliers</translation>
+    </message>			
+    <message>
+        <source>Grid de Interpolação</source>
+        <translation>Interpolation Grid</translation>
+    </message>			
+    <message>
+        <source>Gerar Mapa Desvio Padrão</source>
+        <translation>Generate Standard Deviation Map</translation>
     </message>			
     <message>
         <source>O Sistema de Coordenadas Geográficas deve estar em UTM.</source>
