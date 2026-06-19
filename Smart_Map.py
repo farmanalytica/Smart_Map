@@ -29,7 +29,8 @@ from qgis.PyQt.QtCore import QTranslator, QCoreApplication, QVariant #, QSetting
 from qgis.PyQt.QtWidgets import QAction, QFileDialog, QMessageBox, QTableWidgetItem, QProgressDialog
 from qgis.PyQt.QtGui import QIcon, QPixmap, QColor, QBrush 
 
-from qgis.core import QgsProject             #get the directory for project QGIS  
+from qgis.core import QgsProject             #get the directory for project QGIS
+from qgis.core import QgsSettings            #read QGIS locale for language auto-detection  
 from qgis.core import QgsProcessingFeedback  #generate LayerRaster Clipped 
 from qgis.core import QgsVectorFileWriter    #Convert  .shp em .csv   ou  .csv  em .shp 
 from qgis.core import QgsVectorLayer         #Create  VetorLayer   (.shp)
@@ -199,24 +200,10 @@ class smart_map:
                 QCoreApplication.installTranslator(self.translator)
         '''
 
-        f = open(os.path.join(self.plugin_dir, 'i18n', 'language.txt'), 'r')        
-        self.language = f.read()
-        f.close()     
-
-        if self.language == 'Portuguese': #Plugin is configurated to Portuguese 
-            
-            locale_path = os.path.join(self.plugin_dir, 'i18n', 'smart_map_en_to_pt.qm')
-
-        else:                             #Plugin is configurated to English
-            
-            locale_path = os.path.join(self.plugin_dir, 'i18n', 'smart_map_pt_to_en.qm')
-
-
-        if os.path.exists(locale_path):
-
-            self.translator = QTranslator()
-            self.translator.load(locale_path)
-            QCoreApplication.installTranslator(self.translator)
+        # Language is auto-detected from the QGIS locale (no manual switch).
+        # Source strings are Portuguese; English is the default and is shown by
+        # loading the pt->en translation unless QGIS is set to Portuguese.
+        self._install_translator()
 
         # Get path absolute
         self.path_absolute = QgsProject.instance().readPath("./")
@@ -246,40 +233,42 @@ class smart_map:
         self.first_start = True
         self.Index_LayerAtual  = -1         #Index_LayerCurrent starts with a negative value -> was not defined at the beginning of the program
 
-        
+
+    def _install_translator(self):
+        """Auto-detect the UI language from the QGIS locale (default English).
+
+        Source strings are Portuguese. English is the default: the pt->en
+        translation is installed unless QGIS is set to Portuguese, in which case
+        the source (Portuguese) strings are shown as-is. No manual language switch.
+        """
+        locale = QgsSettings().value('locale/userLocale', 'en_US')
+        self.language = 'Portuguese' if str(locale).lower().startswith('pt') else 'English'
+
+        if self.language == 'English':
+            locale_path = os.path.join(self.plugin_dir, 'i18n', 'smart_map_pt_to_en.qm')
+            if os.path.exists(locale_path):
+                self.translator = QTranslator()
+                self.translator.load(locale_path)
+                QCoreApplication.installTranslator(self.translator)
+
+
     def closeEvent(self, event):
 
-        
+
         close = QMessageBox.question(self.dlg, self.tr('Mensagem'), self.tr('Deseja realmente sair?'), QMessageBox.Yes | QMessageBox.No)
 
         if close == QMessageBox.Yes:
-            
+
             try:
                 # mMapLayerComboBox lives on the data view in the new architecture.
                 self.dlg.get_data_view().mMapLayerComboBox.currentIndexChanged.disconnect()
             except (TypeError, AttributeError):
                 pass  # Ignore if no connections exist / view not built yet
 
-          
-           
-            if self.language == 'Portuguese': #Plugin is configurated to Portuguese 
-                
-                locale_path = os.path.join(self.plugin_dir, 'i18n', 'smart_map_en_to_pt.qm')
-
-            else: #Plugin is configurated to English
-                
-                locale_path = os.path.join(self.plugin_dir, 'i18n', 'smart_map_pt_to_en.qm')
-       
-            if os.path.exists(locale_path):
-     
-                self.translator = QTranslator()
-                self.translator.load(locale_path)              
-                QCoreApplication.installTranslator(self.translator)
-            
             event.accept()
-                
+
         else:
-            event.ignore()        
+            event.ignore()
        
         
     #noinspection PyMethodMayBeStatic
@@ -477,10 +466,9 @@ class smart_map:
         self.data_ctrl.kriging_view = kriging_view
         self.data_ctrl.svm_view = svm_view
 
-        # UI controller (language switching + about dialog)
+        # UI controller (about dialog). Language is auto-detected from the QGIS
+        # locale at startup; there is no manual language switch.
         self.ui_ctrl = UIController(self.dlg, self.plugin_dir, self.icon_path, self.tr)
-        self.dlg.label_language_PT.mousePressEvent = self.ui_ctrl.on_language_pt_clicked
-        self.dlg.label_language_USA.mousePressEvent = self.ui_ctrl.on_language_usa_clicked
         self.dlg.label_About.mousePressEvent = self.ui_ctrl.on_about_clicked
 
         # Wire data view signals
@@ -699,87 +687,64 @@ class smart_map:
              return
  
 
-        self.path_absolute = QgsProject.instance().readPath("./")  
+        self.path_absolute = QgsProject.instance().readPath("./")
 
-        if self.path_absolute == './':  #there is no open QGIS project 
+        # No saved QGIS project -> fall back to the user's home directory so the
+        # plugin can still run (generated files go to <home>/Smart-Map).
+        if self.path_absolute == './':
+            self.path_absolute = os.path.expanduser('~')
 
-            msg_box = QMessageBox()
-            msg_box.setWindowIcon(QtGui.QIcon(self.icon_path))
-            msg_box.setIcon(QMessageBox.Warning)
-            msg_box.setWindowTitle(self.tr('Mensagem'))
-            msg_box.setText(self.tr('Não existe nenhum projeto QGIS aberto. Abra um projeto QGIS.') + '\n' + self.tr('Ou save o projeto atual antes de executar o plugin Smart-Map.'))
-            msg_box.exec_()
 
+        # --- Resolve the working directory (project dir / Smart-Map) -------
+        # Controllers are constructed with this path, so it must be final
+        # BEFORE _initialize_controllers runs.
+        project_dir = self.path_absolute
+        if not os.path.isdir(os.path.join(project_dir, 'Smart-Map')):
+            os.mkdir(os.path.join(project_dir, 'Smart-Map'))
+        self.path_absolute = os.path.join(project_dir, 'Smart-Map')
+
+        # Language is auto-detected and the translator installed in __init__.
+
+        # --- Build a fresh dialog + controllers every run ------------------
+        self.dlg = SmartMapDialog(self.iface, self.plugin_dir, self.icon_path, self.tr)
+        self.first_start = False
+
+        # Controllers self-wire their view signals in _initialize_controllers.
+        self._initialize_controllers()
+
+        # --- Execution counter ---------------------------------------------
+        exec_path = os.path.join(self.plugin_dir, 'utils', 'execute_number.txt')
+        if os.path.isfile(exec_path):
+            with open(exec_path, 'r') as f:
+                exec_number = int(f.read()) + 1
         else:
+            exec_number = 1
+        with open(exec_path, 'w') as f:
+            f.write(str(exec_number))
 
-            # --- Resolve the working directory (project dir / Smart-Map) -------
-            # Controllers are constructed with this path, so it must be final
-            # BEFORE _initialize_controllers runs.
-            project_dir = self.path_absolute
-            if not os.path.isdir(os.path.join(project_dir, 'Smart-Map')):
-                os.mkdir(os.path.join(project_dir, 'Smart-Map'))
-            self.path_absolute = os.path.join(project_dir, 'Smart-Map')
+        # --- Window setup --------------------------------------------------
+        self.dlg.closeEvent = self.closeEvent
+        self.dlg.setWindowFlag(QtCore.Qt.WindowMinimizeButtonHint, True)
+        self.dlg.setWindowIcon(QtGui.QIcon(self.icon_path))
 
-            # --- Read persisted language (applied via the translator below) ----
-            with open(os.path.join(self.plugin_dir, 'i18n', 'language.txt'), 'r') as f:
-                self.language = f.read()
+        # Show the working directory in the data tab.
+        self.dlg.get_data_view().lineEdit.setText(self.path_absolute)
 
-            if self.language == 'Portuguese':
-                locale_path = os.path.join(self.plugin_dir, 'i18n', 'smart_map_en_to_pt.qm')
-            else:
-                locale_path = os.path.join(self.plugin_dir, 'i18n', 'smart_map_pt_to_en.qm')
+        # --- Show + initial population -------------------------------------
+        self.dlg.show()
 
-            if os.path.exists(locale_path):
-                self.translator = QTranslator()
-                self.translator.load(locale_path)
-                QCoreApplication.installTranslator(self.translator)
+        # Trigger the attribute-table layer handler if a layer is preselected.
+        data_view = self.dlg.get_data_view()
+        if data_view.mMapLayerComboBox.currentIndex() >= 0:
+            self.data_ctrl.on_layer_combo_changed(
+                data_view.mMapLayerComboBox.currentIndex()
+            )
 
-            # --- Build a fresh dialog + controllers every run ------------------
-            self.dlg = SmartMapDialog(self.iface, self.plugin_dir, self.icon_path, self.tr)
-            self.first_start = False
+        # Populate the management-zones map list from any existing results.
+        self.zones_ctrl.load_maps_to_generate_zones()
 
-            # Controllers self-wire their view signals in _initialize_controllers.
-            self._initialize_controllers()
+        result = self.dlg.exec_()
 
-            # --- Language flag icons in the header -----------------------------
-            pixmap_BRA = QPixmap(os.path.join(self.plugin_dir, 'icon_bra.png'))
-            self.dlg.label_language_PT.setPixmap(pixmap_BRA)
-            pixmap_USA = QPixmap(os.path.join(self.plugin_dir, 'icon_usa.png'))
-            self.dlg.label_language_USA.setPixmap(pixmap_USA)
-
-            # --- Execution counter ---------------------------------------------
-            exec_path = os.path.join(self.plugin_dir, 'utils', 'execute_number.txt')
-            if os.path.isfile(exec_path):
-                with open(exec_path, 'r') as f:
-                    exec_number = int(f.read()) + 1
-            else:
-                exec_number = 1
-            with open(exec_path, 'w') as f:
-                f.write(str(exec_number))
-
-            # --- Window setup --------------------------------------------------
-            self.dlg.closeEvent = self.closeEvent
-            self.dlg.setWindowFlag(QtCore.Qt.WindowMinimizeButtonHint, True)
-            self.dlg.setWindowIcon(QtGui.QIcon(self.icon_path))
-
-            # Show the working directory in the data tab.
-            self.dlg.get_data_view().lineEdit.setText(self.path_absolute)
-
-            # --- Show + initial population -------------------------------------
-            self.dlg.show()
-
-            # Trigger the attribute-table layer handler if a layer is preselected.
-            data_view = self.dlg.get_data_view()
-            if data_view.mMapLayerComboBox.currentIndex() >= 0:
-                self.data_ctrl.on_layer_combo_changed(
-                    data_view.mMapLayerComboBox.currentIndex()
-                )
-
-            # Populate the management-zones map list from any existing results.
-            self.zones_ctrl.load_maps_to_generate_zones()
-
-            result = self.dlg.exec_()
-
-            if result:
-                pass
+        if result:
+            pass
 

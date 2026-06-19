@@ -6,6 +6,7 @@ from qgis.PyQt.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QPushButton,
     QComboBox, QTableWidget, QCheckBox, QLineEdit, QDoubleSpinBox,
 )
+from qgis.gui import QgsMapLayerComboBox
 
 
 class SVMView(QWidget):
@@ -33,7 +34,7 @@ class SVMView(QWidget):
         source_layout.addWidget(self.comboBox_SVM_Fonte)
         self.label_SVM_DenseLayer = QLabel(self.tr('Layer Densa:'))
         source_layout.addWidget(self.label_SVM_DenseLayer)
-        self.mMapLayerComboBox_DenseLayer = QtWidgets.QgsMapLayerComboBox()
+        self.mMapLayerComboBox_DenseLayer = QgsMapLayerComboBox()
         source_layout.addWidget(self.mMapLayerComboBox_DenseLayer)
         source_layout.addStretch()
         source_group.setLayout(source_layout)

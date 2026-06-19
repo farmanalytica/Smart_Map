@@ -11,6 +11,7 @@ from qgis.PyQt.QtCore import Qt, pyqtSignal
 from qgis.PyQt.QtGui import QIcon, QPixmap
 
 from qgis.core import QgsMapLayerProxyModel
+from qgis.gui import QgsMapLayerComboBox
 
 
 class DataView(QWidget):
@@ -73,7 +74,7 @@ class DataView(QWidget):
         combo_layout = QHBoxLayout()
         combo_layout.addWidget(QLabel(self.tr('Layer QGIS:')))
 
-        self.mMapLayerComboBox = QtWidgets.QgsMapLayerComboBox()
+        self.mMapLayerComboBox = QgsMapLayerComboBox()
         self.mMapLayerComboBox.setFilters(QgsMapLayerProxyModel.VectorLayer)
         self.mMapLayerComboBox.currentIndexChanged.connect(self.layer_changed.emit)
         combo_layout.addWidget(self.mMapLayerComboBox)
@@ -271,7 +272,7 @@ class DataView(QWidget):
         layer_layout = QHBoxLayout()
         layer_layout.addWidget(QLabel(self.tr('Layer de Contorno:')))
 
-        self.mMapLayerComboBox_AreaCont = QtWidgets.QgsMapLayerComboBox()
+        self.mMapLayerComboBox_AreaCont = QgsMapLayerComboBox()
         self.mMapLayerComboBox_AreaCont.setFilters(
             QgsMapLayerProxyModel.VectorLayer | QgsMapLayerProxyModel.PolygonLayer
         )

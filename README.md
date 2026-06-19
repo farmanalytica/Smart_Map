@@ -1,6 +1,6 @@
 # Smart-Map Plugin (Farm Analytica Fork)
 
-Fork of [SmartMapPlugin](https://github.com/gustavowillam/SmartMapPlugin) maintained by Farm Analytica.
+Fork of [SmartMapPlugin](https://github.com/gustavowillam/SmartMapPlugin) maintained by FARM Analytica.
 
 ## Original Repository
 
