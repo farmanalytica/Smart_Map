@@ -15,9 +15,10 @@ from ..krig import semivariogram
 class VariogramController:
     """Handles variogram calculation, tuning, and visualization."""
 
-    def __init__(self, dialog, data_controller, icon_path, path_absolute, tr_func):
-        self.dialog = dialog
+    def __init__(self, view, data_controller, interp_mgr, icon_path, path_absolute, tr_func):
+        self.view = view
         self.data_ctrl = data_controller
+        self.interp_mgr = interp_mgr
         self.icon_path = icon_path
         self.path_absolute = path_absolute
         self.tr = tr_func

@@ -16,10 +16,11 @@ from ..krig import kriging
 class KrigingController:
     """Handles kriging interpolation and cross-validation."""
 
-    def __init__(self, dialog, data_controller, variogram_controller, data_ctrl, icon_path, path_absolute, tr_func):
-        self.dialog = dialog
+    def __init__(self, view, data_controller, variogram_controller, interp_mgr, icon_path, path_absolute, tr_func):
+        self.view = view
         self.data_ctrl = data_controller
         self.variogram_ctrl = variogram_controller
+        self.interp_mgr = interp_mgr
         self.icon_path = icon_path
         self.path_absolute = path_absolute
         self.tr = tr_func

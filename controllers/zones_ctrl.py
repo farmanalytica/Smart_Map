@@ -14,8 +14,8 @@ from qgis.PyQt.QtGui import QIcon
 class ZonesController:
     """Handles management zone definition via fuzzy c-means clustering."""
 
-    def __init__(self, dialog, data_ctrl, zones_mgr, icon_path, path_absolute, tr_func):
-        self.dialog = dialog
+    def __init__(self, view, data_ctrl, zones_mgr, icon_path, path_absolute, tr_func):
+        self.view = view
         self.data_ctrl = data_ctrl
         self.zones_mgr = zones_mgr
         self.icon_path = icon_path
@@ -44,7 +44,7 @@ class ZonesController:
     # Variable management
     def on_add_var_clicked(self):
         """Add selected variable to zone clustering."""
-        var_name = self.dialog.comboBox_ZM_Variables.currentText()
+        var_name = self.view.comboBox_ZM_Variables.currentText()
         if not var_name or var_name in self.zone_variables:
             return
 
@@ -66,21 +66,21 @@ class ZonesController:
 
     def on_remove_var_clicked(self):
         """Remove selected variable from zones."""
-        var_name = self.dialog.comboBox_ZM_Variables_Remove.currentText()
+        var_name = self.view.comboBox_ZM_Variables_Remove.currentText()
         if var_name and var_name in self.zone_variables:
             self.zone_variables.remove(var_name)
             self._update_zone_vars_table()
 
     def _update_zone_vars_table(self):
         """Display zone variables in table."""
-        self.dialog.datatable_ZM_Variables.setColumnCount(1)
-        self.dialog.datatable_ZM_Variables.setRowCount(len(self.zone_variables))
-        self.dialog.datatable_ZM_Variables.setHorizontalHeaderLabels([self.tr('Variáveis')])
+        self.view.datatable_ZM_Variables.setColumnCount(1)
+        self.view.datatable_ZM_Variables.setRowCount(len(self.zone_variables))
+        self.view.datatable_ZM_Variables.setHorizontalHeaderLabels([self.tr('Variáveis')])
 
         for i, var in enumerate(self.zone_variables):
-            self.dialog.datatable_ZM_Variables.setItem(i, 0, QTableWidgetItem(var))
+            self.view.datatable_ZM_Variables.setItem(i, 0, QTableWidgetItem(var))
 
-        self.dialog.datatable_ZM_Variables.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
+        self.view.datatable_ZM_Variables.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
 
     def on_zone_vars_table_double_clicked(self, item):
         """Show variable details."""
@@ -122,18 +122,18 @@ class ZonesController:
             (k, v['fpi'], v['nce']) for k, v in self.fpi_nce_results.items()
         ]
 
-        self.dialog.datatable_ZM_FPI_NCE.setColumnCount(3)
-        self.dialog.datatable_ZM_FPI_NCE.setRowCount(len(results_list))
-        self.dialog.datatable_ZM_FPI_NCE.setHorizontalHeaderLabels(
+        self.view.datatable_ZM_FPI_NCE.setColumnCount(3)
+        self.view.datatable_ZM_FPI_NCE.setRowCount(len(results_list))
+        self.view.datatable_ZM_FPI_NCE.setHorizontalHeaderLabels(
             [self.tr('Clusters'), 'FPI', 'NCE']
         )
 
         for i, (clusters, fpi, nce) in enumerate(results_list):
-            self.dialog.datatable_ZM_FPI_NCE.setItem(i, 0, QTableWidgetItem(str(clusters)))
-            self.dialog.datatable_ZM_FPI_NCE.setItem(i, 1, QTableWidgetItem(f'{fpi:.4f}'))
-            self.dialog.datatable_ZM_FPI_NCE.setItem(i, 2, QTableWidgetItem(f'{nce:.4f}'))
+            self.view.datatable_ZM_FPI_NCE.setItem(i, 0, QTableWidgetItem(str(clusters)))
+            self.view.datatable_ZM_FPI_NCE.setItem(i, 1, QTableWidgetItem(f'{fpi:.4f}'))
+            self.view.datatable_ZM_FPI_NCE.setItem(i, 2, QTableWidgetItem(f'{nce:.4f}'))
 
-        self.dialog.datatable_ZM_FPI_NCE.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
+        self.view.datatable_ZM_FPI_NCE.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
 
     def on_zone_count_changed(self, value):
         """Update ideal zone count."""
@@ -177,32 +177,32 @@ class ZonesController:
     def _display_zone_results(self, zones_stats):
         """Display zone cluster results."""
         # Display zone centers
-        self.dialog.datatable_ZM_Centros.setColumnCount(len(self.zone_variables))
-        self.dialog.datatable_ZM_Centros.setRowCount(self.ideal_zones_count)
-        self.dialog.datatable_ZM_Centros.setHorizontalHeaderLabels(self.zone_variables)
+        self.view.datatable_ZM_Centros.setColumnCount(len(self.zone_variables))
+        self.view.datatable_ZM_Centros.setRowCount(self.ideal_zones_count)
+        self.view.datatable_ZM_Centros.setHorizontalHeaderLabels(self.zone_variables)
 
         for zone_id, center in enumerate(self.zone_centers):
             for j, val in enumerate(center):
                 text = f'{val:.3f}'
-                self.dialog.datatable_ZM_Centros.setItem(zone_id, j, QTableWidgetItem(text))
+                self.view.datatable_ZM_Centros.setItem(zone_id, j, QTableWidgetItem(text))
 
-        self.dialog.datatable_ZM_Centros.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
+        self.view.datatable_ZM_Centros.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
 
         # Display zone assignments (first 100 rows)
-        self.dialog.datatable_ZM_Class.setColumnCount(self.ideal_zones_count + 1)
-        self.dialog.datatable_ZM_Class.setRowCount(min(100, len(self.zone_labels)))
+        self.view.datatable_ZM_Class.setColumnCount(self.ideal_zones_count + 1)
+        self.view.datatable_ZM_Class.setRowCount(min(100, len(self.zone_labels)))
 
         cols = [self.tr('ID')] + [f'{self.tr("Zona")} {i}' for i in range(self.ideal_zones_count)]
-        self.dialog.datatable_ZM_Class.setHorizontalHeaderLabels(cols)
+        self.view.datatable_ZM_Class.setHorizontalHeaderLabels(cols)
 
         for i in range(min(100, len(self.zone_labels))):
-            self.dialog.datatable_ZM_Class.setItem(i, 0, QTableWidgetItem(str(i)))
+            self.view.datatable_ZM_Class.setItem(i, 0, QTableWidgetItem(str(i)))
             zone_id = self.zone_labels[i]
             for z in range(self.ideal_zones_count):
                 marker = '●' if z == zone_id else '○'
-                self.dialog.datatable_ZM_Class.setItem(i, z + 1, QTableWidgetItem(marker))
+                self.view.datatable_ZM_Class.setItem(i, z + 1, QTableWidgetItem(marker))
 
-        self.dialog.datatable_ZM_Class.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
+        self.view.datatable_ZM_Class.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
 
         # Export zones to shapefile
         self._export_zones_shapefile()

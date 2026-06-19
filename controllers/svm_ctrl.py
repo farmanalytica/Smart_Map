@@ -16,11 +16,11 @@ from qgis.core import QgsMapLayerType
 class SVMController:
     """Handles SVM training, feature engineering, and spatial analysis."""
 
-    def __init__(self, dialog, data_ctrl, spatial_mgr, interp_mgr, icon_path, path_absolute, tr_func):
-        self.dialog = dialog
+    def __init__(self, view, data_ctrl, interp_mgr, spatial_mgr, icon_path, path_absolute, tr_func):
+        self.view = view
         self.data_ctrl = data_ctrl
-        self.spatial_mgr = spatial_mgr
         self.interp_mgr = interp_mgr
+        self.spatial_mgr = spatial_mgr
         self.icon_path = icon_path
         self.path_absolute = path_absolute
         self.tr = tr_func

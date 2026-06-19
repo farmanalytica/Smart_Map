@@ -62,6 +62,13 @@ from .controllers.data_ctrl import DataController
 from .controllers.grid_ctrl import GridController
 from .controllers.variogram_ctrl import VariogramController
 from .controllers.kriging_ctrl import KrigingController
+from .controllers.svm_ctrl import SVMController
+from .controllers.zones_ctrl import ZonesController
+
+from .managers.interpolation_manager import InterpolationManager
+from .managers.spatial_analysis_manager import SpatialAnalysisManager
+from .managers.zones_manager import ZonesManager
+from .managers.data_manager import DataManager
 
 
 import os, os.path
@@ -400,6 +407,16 @@ class smart_map:
     def _initialize_controllers(self):
         """Initialize and wire controllers to views."""
         data_view = self.dlg.get_data_view()
+        variogram_view = self.dlg.get_variogram_view()
+        kriging_view = self.dlg.get_kriging_view()
+        svm_view = self.dlg.get_svm_view()
+        zones_view = self.dlg.get_zones_view()
+
+        # Create managers
+        self.interp_mgr = InterpolationManager()
+        self.spatial_mgr = SpatialAnalysisManager()
+        self.zones_mgr = ZonesManager()
+        self.data_mgr = DataManager()
 
         # Data controller
         self.data_ctrl = DataController(
@@ -414,35 +431,107 @@ class smart_map:
 
         # Variogram controller
         self.variogram_ctrl = VariogramController(
-            data_view, self.data_ctrl, self.icon_path, self.path_absolute, self.tr
+            variogram_view, self.data_ctrl, self.interp_mgr,
+            self.icon_path, self.path_absolute, self.tr
         )
 
         # Kriging controller
         self.kriging_ctrl = KrigingController(
-            data_view, self.data_ctrl, self.variogram_ctrl,
-            self.data_ctrl, self.icon_path, self.path_absolute, self.tr
+            kriging_view, self.data_ctrl, self.variogram_ctrl,
+            self.interp_mgr, self.icon_path, self.path_absolute, self.tr
         )
 
-        # Wire view signals to controller slots
+        # SVM controller
+        self.svm_ctrl = SVMController(
+            svm_view, self.data_ctrl, self.interp_mgr, self.spatial_mgr,
+            self.icon_path, self.path_absolute, self.tr
+        )
+
+        # Zones controller
+        self.zones_ctrl = ZonesController(
+            zones_view, self.data_ctrl, self.zones_mgr,
+            self.icon_path, self.path_absolute, self.tr
+        )
+
+        # Wire data view signals
         data_view.import_clicked.connect(self.data_ctrl.on_import_qgis_clicked)
         data_view.layer_changed.connect(self.data_ctrl.on_layer_combo_changed)
-
         data_view.pushButton_File_Save.clicked.connect(self.data_ctrl.on_file_save_clicked)
-        data_view.checkBox_Eliminate_Outilier.clicked.connect(lambda: None)  # Handled in import
+        data_view.checkBox_Eliminate_Outilier.clicked.connect(lambda: None)
 
         data_view.SpinBox_Pixel_Size_X.valueChanged.connect(self.grid_ctrl.on_pixel_size_x_changed)
         data_view.SpinBox_Pixel_Size_Y.valueChanged.connect(self.grid_ctrl.on_pixel_size_y_changed)
-
         data_view.lineEdit_XMin.editingFinished.connect(self.grid_ctrl.on_x_min_edited)
         data_view.lineEdit_XMax.editingFinished.connect(self.grid_ctrl.on_x_max_edited)
         data_view.lineEdit_YMin.editingFinished.connect(self.grid_ctrl.on_y_min_edited)
         data_view.lineEdit_YMax.editingFinished.connect(self.grid_ctrl.on_y_max_edited)
-
         data_view.checkBox_Area_Contorno.toggled.connect(self.grid_ctrl.on_area_contour_toggled)
         data_view.mMapLayerComboBox_AreaCont.currentIndexChanged.connect(
             self.grid_ctrl.on_contour_layer_combo_changed
         )
         data_view.pushButton_Area_Contorno.clicked.connect(self.grid_ctrl.on_contour_apply_clicked)
+
+        # Wire variogram view signals
+        variogram_view.comboBox_Modelo.currentIndexChanged.connect(
+            self.variogram_ctrl.on_model_combo_changed
+        )
+        variogram_view.pushButton_VariogramaAjust.clicked.connect(
+            self.variogram_ctrl.on_fit_variogram_clicked
+        )
+        variogram_view.pushButton_VariogramaReset.clicked.connect(
+            self.variogram_ctrl.on_reset_variogram_clicked
+        )
+        variogram_view.pushButton_VariogramaSave.clicked.connect(
+            self.variogram_ctrl.on_save_variogram_clicked
+        )
+
+        # Wire kriging view signals
+        kriging_view.pushButton_Krigagem.clicked.connect(
+            self.kriging_ctrl.on_kriging_clicked
+        )
+        kriging_view.pushButton_Validacao_Cruzada_OK.clicked.connect(
+            self.kriging_ctrl.on_cross_validation_clicked
+        )
+
+        # Wire SVM view signals
+        svm_view.pushButton_SVM_Add_Feature.clicked.connect(
+            self.svm_ctrl.on_add_feature_clicked
+        )
+        svm_view.pushButton_SVM_Remove_Feature.clicked.connect(
+            self.svm_ctrl.on_remove_feature_clicked
+        )
+        svm_view.checkBox_RFE.toggled.connect(
+            self.svm_ctrl.on_rfe_toggled
+        )
+        svm_view.checkBox_Moran.toggled.connect(
+            self.svm_ctrl.on_moran_toggled
+        )
+        svm_view.pushButton_SVM.clicked.connect(
+            self.svm_ctrl.on_svm_clicked
+        )
+        svm_view.pushButton_Validacao_Cruzada_SVM.clicked.connect(
+            self.svm_ctrl.on_cross_validation_clicked
+        )
+
+        # Wire zones view signals
+        zones_view.pushButton_ZM_Add_Var.clicked.connect(
+            self.zones_ctrl.on_add_var_clicked
+        )
+        zones_view.pushButton_ZM_Add_All_Vars.clicked.connect(
+            self.zones_ctrl.on_add_all_selected_vars_clicked
+        )
+        zones_view.pushButton_ZM_Remove_Var.clicked.connect(
+            self.zones_ctrl.on_remove_var_clicked
+        )
+        zones_view.pushButton_ZM_Calc_Nr_Ideal.clicked.connect(
+            self.zones_ctrl.on_calc_ideal_zones_clicked
+        )
+        zones_view.spinBox_ZM_NrZonas.valueChanged.connect(
+            self.zones_ctrl.on_zone_count_changed
+        )
+        zones_view.pushButton_ZM_Calcular.clicked.connect(
+            self.zones_ctrl.on_calculate_zones_clicked
+        )
 
     def run(self):
         """Run method that performs all the real work"""

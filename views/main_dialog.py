@@ -9,6 +9,10 @@ from qgis.PyQt.QtCore import Qt, pyqtSignal
 from qgis.PyQt.QtGui import QIcon
 
 from .data_view import DataView
+from .variogram_view import VariogramView
+from .kriging_view import KrigingView
+from .svm_view import SVMView
+from .zones_view import ZonesView
 
 
 class SmartMapDialog(QDialog):
@@ -62,21 +66,21 @@ class SmartMapDialog(QDialog):
         self.data_view = DataView(self.iface, self.plugin_dir, self.icon_path, self.tr)
         self.tabs.addTab(self.data_view, self.tr('Dados'))
 
-        # Variogram tab (stub)
-        var_stub = self._create_stub_tab(self.tr('Variograma'))
-        self.tabs.addTab(var_stub, self.tr('Variograma'))
+        # Variogram tab
+        self.variogram_view = VariogramView(self.tr)
+        self.tabs.addTab(self.variogram_view, self.tr('Variograma'))
 
-        # Kriging tab (stub)
-        krig_stub = self._create_stub_tab(self.tr('Kriging'))
-        self.tabs.addTab(krig_stub, self.tr('Kriging'))
+        # Kriging tab
+        self.kriging_view = KrigingView(self.tr)
+        self.tabs.addTab(self.kriging_view, self.tr('Kriging'))
 
-        # SVM tab (stub)
-        svm_stub = self._create_stub_tab(self.tr('SVM'))
-        self.tabs.addTab(svm_stub, self.tr('SVM'))
+        # SVM tab
+        self.svm_view = SVMView(self.tr)
+        self.tabs.addTab(self.svm_view, self.tr('SVM'))
 
-        # Zones tab (stub)
-        zones_stub = self._create_stub_tab(self.tr('Zonas de Manejo'))
-        self.tabs.addTab(zones_stub, self.tr('Zonas de Manejo'))
+        # Zones tab
+        self.zones_view = ZonesView(self.tr)
+        self.tabs.addTab(self.zones_view, self.tr('Zonas de Manejo'))
 
         layout.addWidget(self.tabs)
 
@@ -97,18 +101,6 @@ class SmartMapDialog(QDialog):
 
         self.setLayout(layout)
 
-    def _create_stub_tab(self, title):
-        """Create placeholder tab."""
-        widget = QtWidgets.QWidget()
-        layout = QVBoxLayout()
-        label = QLabel(f'{title} - Em desenvolvimento')
-        label.setAlignment(Qt.AlignCenter)
-        layout.addStretch()
-        layout.addWidget(label)
-        layout.addStretch()
-        widget.setLayout(layout)
-        return widget
-
     def close_dialog(self):
         """Close dialog cleanly."""
         self.closed.emit()
@@ -122,3 +114,19 @@ class SmartMapDialog(QDialog):
     def get_data_view(self):
         """Get data view for controller wiring."""
         return self.data_view
+
+    def get_variogram_view(self):
+        """Get variogram view for controller wiring."""
+        return self.variogram_view
+
+    def get_kriging_view(self):
+        """Get kriging view for controller wiring."""
+        return self.kriging_view
+
+    def get_svm_view(self):
+        """Get SVM view for controller wiring."""
+        return self.svm_view
+
+    def get_zones_view(self):
+        """Get zones view for controller wiring."""
+        return self.zones_view
