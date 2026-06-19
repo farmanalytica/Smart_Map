@@ -38,20 +38,20 @@ class SVMController:
     def on_source_layer_combo_changed(self, index):
         """Handle source data layer selection (training vs dense layer)."""
         if index == 0:  # Training data from attribute table
-            self.dialog.mMapLayerComboBox_DenseLayer.setEnabled(False)
+            self.view.mMapLayerComboBox_DenseLayer.setEnabled(False)
         else:  # Dense layer for additional features
-            self.dialog.mMapLayerComboBox_DenseLayer.setEnabled(True)
+            self.view.mMapLayerComboBox_DenseLayer.setEnabled(True)
             self.on_dense_layer_combo_changed(0)
 
     def on_dense_layer_combo_changed(self, index):
         """Load features from selected dense layer."""
-        if self.dialog.comboBox_SVM_Fonte.currentIndex() != 1:
+        if self.view.comboBox_SVM_Fonte.currentIndex() != 1:
             return
 
-        if self.dialog.mMapLayerComboBox_DenseLayer.currentIndex() < 0:
+        if self.view.mMapLayerComboBox_DenseLayer.currentIndex() < 0:
             return
 
-        layer = self.dialog.mMapLayerComboBox_DenseLayer.currentLayer()
+        layer = self.view.mMapLayerComboBox_DenseLayer.currentLayer()
 
         # Validate CRS
         if layer.crs().authid() != self.data_ctrl.Cord_X:  # Simplified - use actual CRS check
@@ -63,18 +63,18 @@ class SVMController:
 
         # Load fields based on layer type
         if layer.type() == QgsMapLayerType.RasterLayer:
-            self.dialog.comboBox_SVM_Features.clear()
-            self.dialog.comboBox_SVM_Features.setEnabled(False)
+            self.view.comboBox_SVM_Features.clear()
+            self.view.comboBox_SVM_Features.setEnabled(False)
         else:  # Vector layer
             self.cols_table_atribute_dense = layer.fields().names()
-            self.dialog.comboBox_SVM_Features.clear()
-            self.dialog.comboBox_SVM_Features.addItems(self.cols_table_atribute_dense)
-            self.dialog.comboBox_SVM_Features.setEnabled(True)
+            self.view.comboBox_SVM_Features.clear()
+            self.view.comboBox_SVM_Features.addItems(self.cols_table_atribute_dense)
+            self.view.comboBox_SVM_Features.setEnabled(True)
 
     # Feature management
     def on_add_feature_clicked(self):
         """Add selected feature to SVM training set."""
-        feature_name = self.dialog.comboBox_SVM_Features.currentText()
+        feature_name = self.view.comboBox_SVM_Features.currentText()
         if not feature_name:
             return
 
@@ -84,11 +84,11 @@ class SVMController:
 
     def on_add_selected_features_clicked(self):
         """Add selected features (from Moran table) to model."""
-        selected_rows = self.dialog.datatable_moran.selectedIndexes()
+        selected_rows = self.view.datatable_moran.selectedIndexes()
         for index in selected_rows:
             row = index.row()
             if row in self.list_rows_moran:
-                feature_name = self.dialog.datatable_moran.item(row, 1).text()
+                feature_name = self.view.datatable_moran.item(row, 1).text()
                 if feature_name not in self.list_cov_SVM:
                     self.list_cov_SVM.append(feature_name)
 
@@ -96,7 +96,7 @@ class SVMController:
 
     def on_remove_feature_clicked(self):
         """Remove selected feature from model."""
-        feature_name = self.dialog.comboBox_SVM_Features_Adds.currentText()
+        feature_name = self.view.comboBox_SVM_Features_Adds.currentText()
         if not feature_name or feature_name in [self.data_ctrl.Cord_X, self.data_ctrl.Cord_Y]:
             self._show_warning(
                 self.tr('Aviso'),
@@ -115,17 +115,17 @@ class SVMController:
             self.df_SVM_Testfeatures = self.df_SVM_Trainfeatures.copy()
 
             # Display in table
-            self.dialog.datatable_SVM_Trainfeatures.setColumnCount(len(self.list_cov_SVM))
-            self.dialog.datatable_SVM_Trainfeatures.setRowCount(min(10, len(self.df_SVM_Trainfeatures)))
-            self.dialog.datatable_SVM_Trainfeatures.setHorizontalHeaderLabels(self.list_cov_SVM)
+            self.view.datatable_SVM_Trainfeatures.setColumnCount(len(self.list_cov_SVM))
+            self.view.datatable_SVM_Trainfeatures.setRowCount(min(10, len(self.df_SVM_Trainfeatures)))
+            self.view.datatable_SVM_Trainfeatures.setHorizontalHeaderLabels(self.list_cov_SVM)
 
             for i in range(min(10, len(self.df_SVM_Trainfeatures))):
                 for j, col in enumerate(self.list_cov_SVM):
                     value = self.df_SVM_Trainfeatures.iloc[i, j]
                     text = f'{value:.3f}' if isinstance(value, (int, float)) else str(value)
-                    self.dialog.datatable_SVM_Trainfeatures.setItem(i, j, QTableWidgetItem(text))
+                    self.view.datatable_SVM_Trainfeatures.setItem(i, j, QTableWidgetItem(text))
 
-            self.dialog.datatable_SVM_Trainfeatures.setEditTriggers(
+            self.view.datatable_SVM_Trainfeatures.setEditTriggers(
                 QtWidgets.QTableWidget.NoEditTriggers
             )
 
@@ -140,12 +140,12 @@ class SVMController:
     def on_moran_toggled(self, checked):
         """Calculate Moran's I for feature selection."""
         if not checked:
-            self.dialog.datatable_moran.setColumnCount(0)
-            self.dialog.datatable_moran.setRowCount(0)
+            self.view.datatable_moran.setColumnCount(0)
+            self.view.datatable_moran.setRowCount(0)
             return
 
         try:
-            if self.dialog.comboBox_SVM_Fonte.currentIndex() == 0:  # Attribute table
+            if self.view.comboBox_SVM_Fonte.currentIndex() == 0:  # Attribute table
                 df_analysis = self.data_ctrl.df
             else:  # Dense layer features
                 if len(self.df_SVM_Trainfeatures) == 0:
@@ -173,27 +173,27 @@ class SVMController:
 
     def _display_moran_table(self):
         """Display Moran results in table."""
-        self.dialog.datatable_moran.setColumnCount(len(self.df_moran.columns) + 1)
-        self.dialog.datatable_moran.setRowCount(len(self.df_moran.index))
+        self.view.datatable_moran.setColumnCount(len(self.df_moran.columns) + 1)
+        self.view.datatable_moran.setRowCount(len(self.df_moran.index))
 
         cols = ['Marcar'] + list(self.df_moran.columns.values)
-        self.dialog.datatable_moran.setHorizontalHeaderLabels(cols)
+        self.view.datatable_moran.setHorizontalHeaderLabels(cols)
 
         for i in range(len(self.df_moran.index)):
             # Checkbox in first column
             chk = QtWidgets.QTableWidgetItem()
             chk.setFlags(QtCore.Qt.ItemIsUserCheckable | QtCore.Qt.ItemIsEnabled)
             chk.setCheckState(QtCore.Qt.Unchecked)
-            self.dialog.datatable_moran.setItem(i, 0, chk)
+            self.view.datatable_moran.setItem(i, 0, chk)
 
             # Values in other columns
             for j in range(len(self.df_moran.columns)):
                 value = self.df_moran.iloc[i, j]
                 text = f'{value:.3f}' if isinstance(value, (int, float)) else str(value)
-                self.dialog.datatable_moran.setItem(i, j + 1, QTableWidgetItem(text))
+                self.view.datatable_moran.setItem(i, j + 1, QTableWidgetItem(text))
 
-        self.dialog.datatable_moran.resizeColumnsToContents()
-        self.dialog.datatable_moran.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
+        self.view.datatable_moran.resizeColumnsToContents()
+        self.view.datatable_moran.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
 
     # Feature selection
     def on_rfe_toggled(self, checked):
@@ -255,7 +255,7 @@ class SVMController:
             grid_array = np.array(grid_points)
 
             # Apply contour if defined
-            if self.dialog.checkBox_Area_Contorno.isChecked() and len(self.data_ctrl.df_limite) > 0:
+            if self.view.checkBox_Area_Contorno.isChecked() and len(self.data_ctrl.df_limite) > 0:
                 poly = np.array(self.data_ctrl.df_limite, dtype=float)
                 bbox_path = mplPath.Path(poly)
                 grid_array = np.array([pt for pt in grid_array if bbox_path.contains_point(pt)])
@@ -290,23 +290,23 @@ class SVMController:
 
     def _display_svm_results(self, df_results):
         """Display SVM prediction results."""
-        self.dialog.datatable_pontos_interpolados_SVM.setColumnCount(len(df_results.columns))
-        self.dialog.datatable_pontos_interpolados_SVM.setRowCount(min(100, len(df_results)))
+        self.view.datatable_pontos_interpolados_SVM.setColumnCount(len(df_results.columns))
+        self.view.datatable_pontos_interpolados_SVM.setRowCount(min(100, len(df_results)))
 
-        self.dialog.datatable_pontos_interpolados_SVM.setHorizontalHeaderLabels(df_results.columns)
+        self.view.datatable_pontos_interpolados_SVM.setHorizontalHeaderLabels(df_results.columns)
 
         for i in range(min(100, len(df_results))):
             for j, col in enumerate(df_results.columns):
                 value = df_results.iloc[i, j]
                 text = f'{value:.3f}' if isinstance(value, (int, float)) else str(value)
-                self.dialog.datatable_pontos_interpolados_SVM.setItem(i, j, QTableWidgetItem(text))
+                self.view.datatable_pontos_interpolados_SVM.setItem(i, j, QTableWidgetItem(text))
 
-        self.dialog.datatable_pontos_interpolados_SVM.resizeColumnsToContents()
-        self.dialog.datatable_pontos_interpolados_SVM.setEditTriggers(
+        self.view.datatable_pontos_interpolados_SVM.resizeColumnsToContents()
+        self.view.datatable_pontos_interpolados_SVM.setEditTriggers(
             QtWidgets.QTableWidget.NoEditTriggers
         )
 
-        self.dialog.label_SVM.show()
+        self.view.label_SVM.show()
 
     # Cross-validation
     def on_svm_cross_validation_clicked(self):
@@ -334,28 +334,28 @@ class SVMController:
             })
 
             # Display
-            self.dialog.datatable_validacao_cruzada_SVM.setColumnCount(len(df_cv.columns))
-            self.dialog.datatable_validacao_cruzada_SVM.setRowCount(len(df_cv))
+            self.view.datatable_validacao_cruzada_SVM.setColumnCount(len(df_cv.columns))
+            self.view.datatable_validacao_cruzada_SVM.setRowCount(len(df_cv))
 
-            self.dialog.datatable_validacao_cruzada_SVM.setHorizontalHeaderLabels(df_cv.columns)
+            self.view.datatable_validacao_cruzada_SVM.setHorizontalHeaderLabels(df_cv.columns)
 
             for i in range(len(df_cv)):
                 for j in range(len(df_cv.columns)):
                     value = df_cv.iloc[i, j]
                     text = f'{value:.3f}' if isinstance(value, (int, float)) else str(value)
-                    self.dialog.datatable_validacao_cruzada_SVM.setItem(i, j, QTableWidgetItem(text))
+                    self.view.datatable_validacao_cruzada_SVM.setItem(i, j, QTableWidgetItem(text))
 
                 progress.setValue(i)
                 if progress.wasCanceled():
                     progress.close()
                     return
 
-            self.dialog.datatable_validacao_cruzada_SVM.resizeColumnsToContents()
-            self.dialog.datatable_validacao_cruzada_SVM.setEditTriggers(
+            self.view.datatable_validacao_cruzada_SVM.resizeColumnsToContents()
+            self.view.datatable_validacao_cruzada_SVM.setEditTriggers(
                 QtWidgets.QTableWidget.NoEditTriggers
             )
 
-            self.dialog.label_validacao_cruzada_SVM.show()
+            self.view.label_validacao_cruzada_SVM.show()
             progress.close()
 
         except Exception as e:

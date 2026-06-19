@@ -41,20 +41,20 @@ class KrigingController:
 
         try:
             # Get parameters
-            grid_x = self.dialog.SpinBox_Pixel_Size_X.value()
-            grid_y = self.dialog.SpinBox_Pixel_Size_Y.value()
-            n_neig = int(self.dialog.lineEdit_OK_VBNumMax.text())
-            raio_busca = float(self.dialog.lineEdit_OK_VBRaio.text())
+            grid_x = self.view.SpinBox_Pixel_Size_X.value()
+            grid_y = self.view.SpinBox_Pixel_Size_Y.value()
+            n_neig = int(self.view.lineEdit_OK_VBNumMax.text())
+            raio_busca = float(self.view.lineEdit_OK_VBRaio.text())
 
             # Get model
-            model_idx = self.dialog.comboBox_Modelo.currentIndex()
+            model_idx = self.view.comboBox_Modelo.currentIndex()
             models = ['linear', 'linear-sill', 'exponential', 'spherical', 'gaussian']
             model = models[model_idx] if model_idx < len(models) else 'linear'
 
             # Get variogram parameters
-            nugget = float(self.dialog.lineEdit_Nugget.text())
-            range_ = float(self.dialog.lineEdit_Range.text())
-            sill = float(self.dialog.lineEdit_Sill.text())
+            nugget = float(self.view.lineEdit_Nugget.text())
+            range_ = float(self.view.lineEdit_Range.text())
+            sill = float(self.view.lineEdit_Sill.text())
             var_params = [nugget, range_, sill]
 
             # Create kriging object
@@ -65,13 +65,13 @@ class KrigingController:
             )
 
             # Generate grid
-            has_contour = self.dialog.checkBox_Area_Contorno.isChecked()
+            has_contour = self.view.checkBox_Area_Contorno.isChecked()
 
             if has_contour:
                 if self.variogram_ctrl.df_limite is not None and len(self.variogram_ctrl.df_limite) > 0:
                     xygrid = ok.Grid(grid_x, grid_y, has_contour, self.variogram_ctrl.df_limite)
                 else:
-                    if self.dialog.mMapLayerComboBox_AreaCont.currentIndex() >= 0:
+                    if self.view.mMapLayerComboBox_AreaCont.currentIndex() >= 0:
                         self.variogram_ctrl.on_contour_apply_clicked()
                         xygrid = ok.Grid(grid_x, grid_y, has_contour, self.variogram_ctrl.df_limite)
                     else:
@@ -131,13 +131,13 @@ class KrigingController:
             df_results.to_csv(csv_kri, sep=',', index=False, encoding='utf-8')
 
             # Display in table
-            self.dialog.datatable_pontos_interpolados_OK.setColumnCount(len(df_results.columns))
-            self.dialog.datatable_pontos_interpolados_OK.setRowCount(len(df_results.index))
+            self.view.datatable_pontos_interpolados_OK.setColumnCount(len(df_results.columns))
+            self.view.datatable_pontos_interpolados_OK.setRowCount(len(df_results.index))
 
             cols = list(df_results.columns.values)
             cols[2] = self.tr('Z.Predito')
             cols[3] = self.tr('Desv.Pad.')
-            self.dialog.datatable_pontos_interpolados_OK.setHorizontalHeaderLabels(cols)
+            self.view.datatable_pontos_interpolados_OK.setHorizontalHeaderLabels(cols)
 
             cont = 3
             for i in range(len(df_results.index)):
@@ -145,7 +145,7 @@ class KrigingController:
                     value = df_results.iloc[i, j]
                     text = f'{value:.3f}' if isinstance(value, (int, float)) else str(value)
                     item = QTableWidgetItem(text)
-                    self.dialog.datatable_pontos_interpolados_OK.setItem(i, j, item)
+                    self.view.datatable_pontos_interpolados_OK.setItem(i, j, item)
 
                     cont += 1
                     progress.setValue(cont)
@@ -153,15 +153,15 @@ class KrigingController:
                         progress.close()
                         return
 
-            self.dialog.datatable_pontos_interpolados_OK.resizeColumnsToContents()
-            self.dialog.datatable_pontos_interpolados_OK.setEditTriggers(
+            self.view.datatable_pontos_interpolados_OK.resizeColumnsToContents()
+            self.view.datatable_pontos_interpolados_OK.setEditTriggers(
                 QtWidgets.QTableWidget.NoEditTriggers
             )
 
-            self.dialog.tabWidget_Interpolacao_OK.setCurrentIndex(2)
+            self.view.tabWidget_Interpolacao_OK.setCurrentIndex(2)
 
             # Export to QGIS
-            if self.dialog.checkBox_Qgis_Raster.isChecked():
+            if self.view.checkBox_Qgis_Raster.isChecked():
                 cont += 1
                 progress.setValue(cont)
                 if progress.wasCanceled():
@@ -169,7 +169,7 @@ class KrigingController:
                     return
 
                 try:
-                    self.dialog.mMapLayerComboBox.currentIndexChanged.disconnect()
+                    self.view.mMapLayerComboBox.currentIndexChanged.disconnect()
                 except TypeError:
                     pass
 
@@ -187,9 +187,9 @@ class KrigingController:
                 )
 
                 # Export vector points
-                if self.dialog.checkBox_Qgis_Vector_Points.isChecked():
-                    if (self.dialog.checkBox_Area_Contorno.isChecked() and
-                            self.dialog.mMapLayerComboBox_AreaCont.currentIndex() >= 0):
+                if self.view.checkBox_Qgis_Vector_Points.isChecked():
+                    if (self.view.checkBox_Area_Contorno.isChecked() and
+                            self.view.mMapLayerComboBox_AreaCont.currentIndex() >= 0):
                         cont += 1
                         progress.setValue(cont)
                         if progress.wasCanceled():
@@ -198,12 +198,12 @@ class KrigingController:
 
                         self.data_ctrl.export_shapefile_to_qgis(output_tiff, "native:pixelstopoints")
                     else:
-                        self.dialog.checkBox_Qgis_Vector_Points.setChecked(False)
+                        self.view.checkBox_Qgis_Vector_Points.setChecked(False)
 
                 # Export vector polygons
-                if self.dialog.checkBox_Qgis_Vector_Polygons.isChecked():
-                    if (self.dialog.checkBox_Area_Contorno.isChecked() and
-                            self.dialog.mMapLayerComboBox_AreaCont.currentIndex() >= 0):
+                if self.view.checkBox_Qgis_Vector_Polygons.isChecked():
+                    if (self.view.checkBox_Area_Contorno.isChecked() and
+                            self.view.mMapLayerComboBox_AreaCont.currentIndex() >= 0):
                         cont += 1
                         progress.setValue(cont)
                         if progress.wasCanceled():
@@ -230,9 +230,9 @@ class KrigingController:
             return
 
         # Ensure raster export is enabled
-        if not (self.dialog.checkBox_Qgis_Vector_Points.isChecked() or
-                self.dialog.checkBox_Qgis_Raster.isChecked()):
-            self.dialog.checkBox_Qgis_Raster.setChecked(True)
+        if not (self.view.checkBox_Qgis_Vector_Points.isChecked() or
+                self.view.checkBox_Qgis_Raster.isChecked()):
+            self.view.checkBox_Qgis_Raster.setChecked(True)
 
         # TODO: Implement batch kriging over multiple variables
         # This requires reading saved semivariogram parameters and executing kriging for each
@@ -254,18 +254,18 @@ class KrigingController:
 
         try:
             # Get parameters
-            n_neig = int(self.dialog.lineEdit_OK_VBNumMax.text())
-            raio_busca = float(self.dialog.lineEdit_OK_VBRaio.text())
+            n_neig = int(self.view.lineEdit_OK_VBNumMax.text())
+            raio_busca = float(self.view.lineEdit_OK_VBRaio.text())
 
             # Get model
-            model_idx = self.dialog.comboBox_Modelo.currentIndex()
+            model_idx = self.view.comboBox_Modelo.currentIndex()
             models = ['linear', 'linear-sill', 'exponential', 'spherical', 'gaussian']
             model = models[model_idx] if model_idx < len(models) else 'linear'
 
             # Get variogram parameters
-            nugget = float(self.dialog.lineEdit_Nugget.text())
-            sill = float(self.dialog.lineEdit_Sill.text())
-            effective_range = float(self.dialog.lineEdit_Range.text())
+            nugget = float(self.view.lineEdit_Nugget.text())
+            sill = float(self.view.lineEdit_Sill.text())
+            effective_range = float(self.view.lineEdit_Range.text())
             var_params = [nugget, effective_range, sill]
 
             # Progress
@@ -324,10 +324,10 @@ class KrigingController:
             self.df_CV_OK.to_csv(csv_path, sep=',', index=False, encoding='utf-8')
 
             # Display in table
-            self.dialog.datatable_validacao_cruzada_OK.setColumnCount(len(self.df_CV_OK.columns))
-            self.dialog.datatable_validacao_cruzada_OK.setRowCount(len(self.df_CV_OK.index))
+            self.view.datatable_validacao_cruzada_OK.setColumnCount(len(self.df_CV_OK.columns))
+            self.view.datatable_validacao_cruzada_OK.setRowCount(len(self.df_CV_OK.index))
 
-            self.dialog.datatable_validacao_cruzada_OK.setHorizontalHeaderLabels(
+            self.view.datatable_validacao_cruzada_OK.setHorizontalHeaderLabels(
                 list(self.df_CV_OK.columns.values)
             )
 
@@ -337,7 +337,7 @@ class KrigingController:
                     value = self.df_CV_OK.iloc[i, j]
                     text = f'{value:.3f}' if isinstance(value, (int, float)) else str(value)
                     item = QTableWidgetItem(text)
-                    self.dialog.datatable_validacao_cruzada_OK.setItem(i, j, item)
+                    self.view.datatable_validacao_cruzada_OK.setItem(i, j, item)
 
                     cont += 1
                     progress.setValue(cont)
@@ -345,8 +345,8 @@ class KrigingController:
                         progress.close()
                         return
 
-            self.dialog.datatable_validacao_cruzada_OK.resizeColumnsToContents()
-            self.dialog.datatable_validacao_cruzada_OK.setEditTriggers(
+            self.view.datatable_validacao_cruzada_OK.resizeColumnsToContents()
+            self.view.datatable_validacao_cruzada_OK.setEditTriggers(
                 QtWidgets.QTableWidget.NoEditTriggers
             )
 

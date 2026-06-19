@@ -476,13 +476,13 @@ class smart_map:
             self.variogram_ctrl.on_model_combo_changed
         )
         variogram_view.pushButton_VariogramaAjust.clicked.connect(
-            self.variogram_ctrl.on_fit_variogram_clicked
+            self.variogram_ctrl.on_variogram_adjust_clicked
         )
         variogram_view.pushButton_VariogramaReset.clicked.connect(
-            self.variogram_ctrl.on_reset_variogram_clicked
+            self.variogram_ctrl.on_variogram_reset_clicked
         )
         variogram_view.pushButton_VariogramaSave.clicked.connect(
-            self.variogram_ctrl.on_save_variogram_clicked
+            self.variogram_ctrl.on_variogram_save_clicked
         )
 
         # Wire kriging view signals
@@ -510,7 +510,7 @@ class smart_map:
             self.svm_ctrl.on_svm_clicked
         )
         svm_view.pushButton_Validacao_Cruzada_SVM.clicked.connect(
-            self.svm_ctrl.on_cross_validation_clicked
+            self.svm_ctrl.on_svm_cross_validation_clicked
         )
 
         # Wire zones view signals
