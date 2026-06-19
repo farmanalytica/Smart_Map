@@ -162,7 +162,7 @@ class SVMController:
             return
 
         maximum = len(self.df_SVM_Trainfeatures.index) * len(self.df_SVM_Trainfeatures.columns)
-        progress = self._create_progress_dialog(self.tr('Importando tabela de atributos...'), maximum)
+        progress = self._create_progress_dialog(self.tr('Importing attribute table...'), maximum)
 
         self.view.datatable_SVM_Trainfeatures.setColumnCount(len(self.df_SVM_Trainfeatures.columns))
         self.view.datatable_SVM_Trainfeatures.setRowCount(len(self.df_SVM_Trainfeatures.index))
@@ -171,7 +171,7 @@ class SVMController:
             cols = list(self.df_SVM_Trainfeatures.columns.values)
             self.view.datatable_SVM_Trainfeatures.setHorizontalHeaderLabels(cols)
         except AttributeError:
-            self._show_warning(self.tr('Mensagem'), self.tr('Erro ao carregar tabela. Valor Inválido!'))
+            self._show_warning(self.tr('Message'), self.tr('Error loading table. Invalid value!'))
 
         cont = 1
         try:
@@ -190,7 +190,7 @@ class SVMController:
                         progress.close()
                         return
         except AttributeError:
-            self._show_warning(self.tr('Mensagem'), self.tr('Erro ao carregar tabela. Valor Inválido!'))
+            self._show_warning(self.tr('Message'), self.tr('Error loading table. Invalid value!'))
 
         self.view.datatable_SVM_Trainfeatures.resizeColumnsToContents()
         self.view.datatable_SVM_Trainfeatures.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
@@ -202,7 +202,7 @@ class SVMController:
             return
 
         maximum = len(self.df_SVM_Trainlabels.index) * len(self.df_SVM_Trainlabels.columns)
-        progress = self._create_progress_dialog(self.tr('Importando tabela de atributos...'), maximum)
+        progress = self._create_progress_dialog(self.tr('Importing attribute table...'), maximum)
 
         self.view.datatable_SVM_Trainlabels.setColumnCount(len(self.df_SVM_Trainlabels.columns))
         self.view.datatable_SVM_Trainlabels.setRowCount(len(self.df_SVM_Trainlabels.index))
@@ -211,7 +211,7 @@ class SVMController:
             cols = list(self.df_SVM_Trainlabels.columns.values)
             self.view.datatable_SVM_Trainlabels.setHorizontalHeaderLabels(cols)
         except AttributeError:
-            self._show_warning(self.tr('Mensagem'), self.tr('Erro ao carregar tabela. Valor Inválido!'))
+            self._show_warning(self.tr('Message'), self.tr('Error loading table. Invalid value!'))
 
         cont = 1
         try:
@@ -230,7 +230,7 @@ class SVMController:
                         progress.close()
                         return
         except AttributeError:
-            self._show_warning(self.tr('Mensagem'), self.tr('Erro ao carregar tabela. Valor Inválido!'))
+            self._show_warning(self.tr('Message'), self.tr('Error loading table. Invalid value!'))
 
         self.view.datatable_SVM_Trainlabels.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
         progress.close()
@@ -327,8 +327,8 @@ class SVMController:
 
         if (lyrCRS_table_atribute is not None) and (lyrCRS != lyrCRS_table_atribute):
             self._show_warning(
-                self.tr('Mensagem'),
-                self.tr('O CRS da Layer selecionada é diferente do CRS da Layer da Tabela de Atributos.')
+                self.tr('Message'),
+                self.tr('The CRS of the selected layer differs from the CRS of the Attribute Table layer.')
             )
             return
 
@@ -391,10 +391,10 @@ class SVMController:
         # Guard: cannot add v_target with neighbour count = 1 (nearest-neighbour method).
         if (Cord_Z == self.data_ctrl.v_target) and (int(self.view.lineEdit_SVM_VBNumMax.text()) == 1):
             self._show_warning(
-                self.tr('Mensagem'),
-                self.tr('O Modelo de Machine Learning não permite adicionar a variável target: ')
+                self.tr('Message'),
+                self.tr('The Machine Learning model does not allow adding the target variable: ')
                 + self.data_ctrl.v_target + '\n'
-                + self.tr('utilizando o método de busca por vizinho mais próximo.')
+                + self.tr('using the nearest-neighbour search method.')
             )
             return
 
@@ -442,7 +442,7 @@ class SVMController:
 
                 maximum = len(arr_xy)
                 progress = self._create_progress_dialog(
-                    self.tr('Gerando grid para os pontos de interpolação (x, y, z): '), maximum)
+                    self.tr('Generating grid for interpolation points (x, y, z): '), maximum)
                 cont = 1
                 for i in range(len(arr_xy)):
                     ponto = (arr_xy[i, 0], arr_xy[i, 1])
@@ -551,7 +551,7 @@ class SVMController:
 
                 maximum = len(features)
                 progress = self._create_progress_dialog(
-                    self.tr('Gerando IDW em TrainFeatures: ') + Cord_Z + '...', maximum)
+                    self.tr('Generating IDW for TrainFeatures: ') + Cord_Z + '...', maximum)
 
                 for cont in range(len(features)):
                     vt2 = np.copy(np.array(self.data_ctrl.df[Cord_Z]))
@@ -593,7 +593,7 @@ class SVMController:
             # ------------------------ TestFeatures IDW engineering over the grid
             maximum = (len(self.gridx) * len(self.gridy))
             progress = self._create_progress_dialog(
-                self.tr('Gerando grid para os pontos de interpolação (x, y, z): ') + Cord_Z + '...', maximum)
+                self.tr('Generating grid for interpolation points (x, y, z): ') + Cord_Z + '...', maximum)
 
             vt = np.array(self.df_SVM_Trainfeatures.iloc[:, len(self.df_SVM_Trainfeatures.columns) - 1])
             gridxy = np.c_[self.df_SVM_Trainfeatures.iloc[:, 0], self.df_SVM_Trainfeatures.iloc[:, 1]]
@@ -644,7 +644,7 @@ class SVMController:
             # Apply contour and flatten the engineered covariate column.
             maximum = (len(self.gridx) * len(self.gridy))
             progress = self._create_progress_dialog(
-                self.tr('Aplicando Área de Contorno ao grid dos pontos de interpolação: ') + Cord_Z + '...', maximum)
+                self.tr('Applying boundary area to the interpolation points grid: ') + Cord_Z + '...', maximum)
 
             lista = []
             if data_view.checkBox_Area_Contorno.isChecked():
@@ -718,7 +718,7 @@ class SVMController:
 
                 maximum = (len(gridx) * len(gridy))
                 progress = self._create_progress_dialog(
-                    self.tr('Gerando grid para os pontos de interpolação (x, y, z): ') + Cord_Z + '...', maximum)
+                    self.tr('Generating grid for interpolation points (x, y, z): ') + Cord_Z + '...', maximum)
 
                 features_Coordx = []
                 features_Coordy = []
@@ -772,7 +772,7 @@ class SVMController:
             # ------------- TrainFeatures: project dense values onto the samples
             maximum = len(self.data_ctrl.data)
             progress = self._create_progress_dialog(
-                self.tr('Gerando covariáveis em TrainFeatures: ') + Cord_Z + '...', maximum)
+                self.tr('Generating covariates for TrainFeatures: ') + Cord_Z + '...', maximum)
 
             vt_dense = features_dense[:, 2]
             gridxy_dense = np.c_[features_dense[:, 0], features_dense[:, 1]]
@@ -827,7 +827,7 @@ class SVMController:
             # ------------- TestFeatures: project dense values onto the grid
             maximum = (len(self.gridx) * len(self.gridy))
             progress = self._create_progress_dialog(
-                self.tr('Gerando grid para os pontos de interpolação (x, y, z): ') + Cord_Z + '...', maximum)
+                self.tr('Generating grid for interpolation points (x, y, z): ') + Cord_Z + '...', maximum)
 
             vt_dense = features_dense[:, 2]
             gridxy_dense = np.c_[features_dense[:, 0], features_dense[:, 1]]
@@ -877,7 +877,7 @@ class SVMController:
 
             maximum = (len(self.gridx) * len(self.gridy))
             progress = self._create_progress_dialog(
-                self.tr('Aplicando Área de Contorno ao grid dos pontos de interpolação: ') + Cord_Z + '...', maximum)
+                self.tr('Applying boundary area to the interpolation points grid: ') + Cord_Z + '...', maximum)
 
             lista = []
             if data_view.checkBox_Area_Contorno.isChecked():
@@ -919,7 +919,7 @@ class SVMController:
 
         # ----------------------------------------------- fill TrainFeatures table
         maximum = len(self.df_SVM_Trainfeatures.index)
-        progress = self._create_progress_dialog(self.tr('Preenchendo a Tabela TrainFeatures') + '...', maximum)
+        progress = self._create_progress_dialog(self.tr('Filling the TrainFeatures table') + '...', maximum)
 
         self.view.datatable_SVM_Trainfeatures.setColumnCount(len(self.df_SVM_Trainfeatures.columns))
         self.view.datatable_SVM_Trainfeatures.setRowCount(len(self.df_SVM_Trainfeatures.index))
@@ -928,7 +928,7 @@ class SVMController:
             cols = list(self.df_SVM_Trainfeatures.columns.values)
             self.view.datatable_SVM_Trainfeatures.setHorizontalHeaderLabels(cols)
         except AttributeError:
-            self._show_warning(self.tr('Mensagem'), self.tr('Erro ao carregar tabela. Valor Inválido!'))
+            self._show_warning(self.tr('Message'), self.tr('Error loading table. Invalid value!'))
 
         cont = 1
         try:
@@ -947,7 +947,7 @@ class SVMController:
                     progress.close()
                     return
         except AttributeError:
-            self._show_warning(self.tr('Mensagem'), self.tr('Erro ao carregar tabela. Valor Inválido!'))
+            self._show_warning(self.tr('Message'), self.tr('Error loading table. Invalid value!'))
 
         progress.close()
 
@@ -979,8 +979,8 @@ class SVMController:
         Full port of pushButton_SVM_Add_Selected_Features_clicked.
         """
         msg = QMessageBox.question(
-            self.view, self.tr('Mensagem'),
-            self.tr('As variáveis selecionadas serão adicionadas ao modelo SVM. Deseja continuar?'),
+            self.view, self.tr('Message'),
+            self.tr('The selected variables will be added to the SVM model. Do you want to continue?'),
             QMessageBox.Yes | QMessageBox.No)
 
         if msg != QMessageBox.Yes:
@@ -1017,8 +1017,8 @@ class SVMController:
         """
         if len(self.list_cov_SVM) == 2:  # only X and Y -> cannot remove coordinates
             self._show_warning(
-                self.tr('Mensagem'),
-                self.tr('Todas as Covariáveis do Modelo SVM foram removidas.'))
+                self.tr('Message'),
+                self.tr('All covariates have been removed from the SVM model.'))
             return
 
         id_col = self.view.comboBox_SVM_Features_Adds.currentIndex()
@@ -1063,8 +1063,8 @@ class SVMController:
                 sep=',', index=False, encoding='utf-8')
         else:
             self._show_warning(
-                self.tr('Mensagem'),
-                self.tr('As Coordenadas (x, y) não podem ser removidas do Modelo SVM.'))
+                self.tr('Message'),
+                self.tr('The coordinates (x, y) cannot be removed from the SVM model.'))
 
     # ====================================================== MORAN (spatial corr)
     def on_moran_toggled(self, checked):
@@ -1087,7 +1087,7 @@ class SVMController:
                         [self.df_SVM_Trainfeatures, self.data_ctrl.df[[self.data_ctrl.v_target]]], axis=1)
                     self._correlacao_Moran_BV(df_Trainfeatures, use_check=False)
         except Exception as e:
-            self._show_warning(self.tr('Erro'), str(e))
+            self._show_warning(self.tr('Error'), str(e))
 
     def _correlacao_Moran_BV(self, dataframe, use_check):
         """Compute and render the Moran bivariate table (ported from correlacao_Moran_BV)."""
@@ -1106,12 +1106,12 @@ class SVMController:
 
         try:
             if use_check is True:
-                cols = [self.tr('Marcar')] + list(df_moran.columns.values)
+                cols = [self.tr('Select')] + list(df_moran.columns.values)
             else:
                 cols = list(df_moran.columns.values)
             self.view.datatable_moran.setHorizontalHeaderLabels(cols)
         except AttributeError:
-            self._show_warning(self.tr('Mensagem'), self.tr('Erro ao carregar tabela. Valor Inválido!'))
+            self._show_warning(self.tr('Message'), self.tr('Error loading table. Invalid value!'))
 
         try:
             for i in range(len(df_moran.index)):
@@ -1138,7 +1138,7 @@ class SVMController:
                     else:
                         self.view.datatable_moran.setItem(i, j, valor)
         except AttributeError:
-            self._show_warning(self.tr('Mensagem'), self.tr('Erro ao carregar tabela. Valor Inválido!'))
+            self._show_warning(self.tr('Message'), self.tr('Error loading table. Invalid value!'))
 
         self.view.datatable_moran.resizeColumnsToContents()
         self.view.datatable_moran.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
@@ -1153,7 +1153,7 @@ class SVMController:
 
         try:
             progress = self._create_progress_dialog(
-                self.tr('Seleção de Variáveis') + ' - ' + self.tr('Recursive Feature Elimination (RFE)') + '...', 5)
+                self.tr('Select Variables') + ' - ' + self.tr('Recursive Feature Elimination (RFE)') + '...', 5)
             progress.setValue(1)
 
             filename = os.path.join(self.path_absolute, '0_Dados.csv')
@@ -1170,7 +1170,7 @@ class SVMController:
             progress.setValue(4)
             progress.close()
         except Exception as e:
-            self._show_warning(self.tr('Erro'), str(e))
+            self._show_warning(self.tr('Error'), str(e))
 
     def _recursive_feature_elimination(self, dataframe):
         """Compute and render the RFE importance table (ported from Recursive_Feature_Elimination)."""
@@ -1186,7 +1186,7 @@ class SVMController:
             cols[1] = self.tr(cols[1])
             self.view.datatable_RFE.setHorizontalHeaderLabels(cols)
         except AttributeError:
-            self._show_warning(self.tr('Mensagem'), self.tr('Erro ao carregar tabela. Valor Inválido!'))
+            self._show_warning(self.tr('Message'), self.tr('Error loading table. Invalid value!'))
 
         try:
             for i in range(len(df_RFE.index)):
@@ -1203,7 +1203,7 @@ class SVMController:
                         valor = QTableWidgetItem(str(valor))
                     self.view.datatable_RFE.setItem(i, j, valor)
         except AttributeError:
-            self._show_warning(self.tr('Mensagem'), self.tr('Erro ao carregar tabela. Valor Inválido!'))
+            self._show_warning(self.tr('Message'), self.tr('Error loading table. Invalid value!'))
 
         self.view.datatable_RFE.resizeColumnsToContents()
         self.view.datatable_RFE.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
@@ -1255,7 +1255,7 @@ class SVMController:
 
                     maximum = len(arr_xy)
                     progress = self._create_progress_dialog(
-                        self.tr('Gerando grid para os pontos de interpolação (x, y, z): '), maximum)
+                        self.tr('Generating grid for interpolation points (x, y, z): '), maximum)
                     cont = 1
                     for i in range(len(arr_xy)):
                         ponto = (arr_xy[i, 0], arr_xy[i, 1])
@@ -1336,10 +1336,10 @@ class SVMController:
 
             try:
                 cols = list(df_pontos_interpolados_SVM.columns.values)
-                cols[2] = self.tr('Z.Predito')
+                cols[2] = self.tr('Z.Predicted')
                 self.view.datatable_pontos_interpolados_SVM.setHorizontalHeaderLabels(cols)
             except AttributeError:
-                self._show_warning(self.tr('Mensagem'), self.tr('Erro ao carregar tabela. Valor Inválido!'))
+                self._show_warning(self.tr('Message'), self.tr('Error loading table. Invalid value!'))
 
             try:
                 for i in range(len(df_pontos_interpolados_SVM.index)):
@@ -1357,7 +1357,7 @@ class SVMController:
                             progress.close()
                             return
             except AttributeError:
-                self._show_warning(self.tr('Mensagem'), self.tr('Erro ao carregar tabela. Valor Inválido!'))
+                self._show_warning(self.tr('Message'), self.tr('Error loading table. Invalid value!'))
 
             self.view.datatable_pontos_interpolados_SVM.resizeColumnsToContents()
             self.view.datatable_pontos_interpolados_SVM.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
@@ -1432,7 +1432,7 @@ class SVMController:
             progress.close()
 
         except Exception as e:
-            self._show_warning(self.tr('Erro'), self.tr('Erro na SVM') + ': ' + str(e))
+            self._show_warning(self.tr('Error'), self.tr('SVM error') + ': ' + str(e))
 
     def _plot_interpolated_map(self, predictions):
         """Render the SVM interpolated map and set the label pixmap."""
@@ -1549,7 +1549,7 @@ class SVMController:
 
             self.df_CV_SVM = pd.DataFrame(
                 np.atleast_2d(data_CV_SVM),
-                columns=['Coord_X', 'Coord_Y', self.tr('Z.Obs.'), self.tr('Z.Predito')])
+                columns=['Coord_X', 'Coord_Y', self.tr('Z.Obs.'), self.tr('Z.Predicted')])
             self.df_CV_SVM.to_csv(
                 os.path.join(self.path_absolute, '1_SVM_' + self.data_ctrl.VTarget_FileName + '_CV.csv'),
                 sep=',', index=False, encoding='utf-8')
@@ -1561,7 +1561,7 @@ class SVMController:
                 cols = list(self.df_CV_SVM.columns.values)
                 self.view.datatable_validacao_cruzada_SVM.setHorizontalHeaderLabels(cols)
             except AttributeError:
-                self._show_warning(self.tr('Mensagem'), self.tr('Erro ao carregar tabela. Valor Inválido!'))
+                self._show_warning(self.tr('Message'), self.tr('Error loading table. Invalid value!'))
 
             try:
                 for i in range(len(self.df_CV_SVM.index)):
@@ -1579,7 +1579,7 @@ class SVMController:
                             progress.close()
                             return
             except AttributeError:
-                self._show_warning(self.tr('Mensagem'), self.tr('Erro ao carregar tabela. Valor Inválido!'))
+                self._show_warning(self.tr('Message'), self.tr('Error loading table. Invalid value!'))
 
             self.view.datatable_validacao_cruzada_SVM.resizeColumnsToContents()
             self.view.datatable_validacao_cruzada_SVM.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)

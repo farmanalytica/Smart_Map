@@ -4,6 +4,8 @@
 from qgis.PyQt import QtWidgets, QtCore
 from qgis.PyQt.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel, QPushButton, QComboBox, QDoubleSpinBox, QCheckBox, QTableWidget, QSlider
 
+from .styles import tune_layout
+
 class VariogramView(QWidget):
     """Variogram management and tuning view."""
 
@@ -15,23 +17,24 @@ class VariogramView(QWidget):
     def _setup_ui(self):
         """Build variogram view UI."""
         layout = QVBoxLayout()
+        tune_layout(layout)
 
         # Model selection
-        self.groupBox_Variograma_Model = QGroupBox(self.tr('Modelo de Variograma'))
+        self.groupBox_Variograma_Model = QGroupBox(self.tr('Variogram Model'))
         model_group = self.groupBox_Variograma_Model
         model_layout = QHBoxLayout()
-        model_layout.addWidget(QLabel(self.tr('Modelo:')))
+        model_layout.addWidget(QLabel(self.tr('Model:')))
         self.comboBox_Modelo = QComboBox()
         self.comboBox_Modelo.addItems(['Linear', 'Linear-Sill', 'Exponential', 'Spherical', 'Gaussian'])
         model_layout.addWidget(self.comboBox_Modelo)
-        self.checkBox_Variogram_Variancia = QCheckBox(self.tr('Variância Amostral'))
+        self.checkBox_Variogram_Variancia = QCheckBox(self.tr('Sample Variance'))
         model_layout.addWidget(self.checkBox_Variogram_Variancia)
         model_layout.addStretch()
         model_group.setLayout(model_layout)
         layout.addWidget(model_group)
 
         # Parameters
-        params_group = QGroupBox(self.tr('Parâmetros'))
+        params_group = QGroupBox(self.tr('Parameters'))
         params_layout = QVBoxLayout()
 
         # Nugget
@@ -54,7 +57,7 @@ class VariogramView(QWidget):
 
         # Range
         range_layout = QHBoxLayout()
-        range_layout.addWidget(QLabel(self.tr('Alcance (A):')))
+        range_layout.addWidget(QLabel(self.tr('Range (A):')))
         self.lineEdit_Range = QtWidgets.QLineEdit('100.0')
         range_layout.addWidget(self.lineEdit_Range)
         self.horizontalSlider_Range = QSlider(QtCore.Qt.Horizontal)
@@ -65,7 +68,7 @@ class VariogramView(QWidget):
         layout.addWidget(params_group)
 
         # Grid parameters
-        grid_group = QGroupBox(self.tr('Parâmetros do Grid'))
+        grid_group = QGroupBox(self.tr('Grid Parameters'))
         grid_layout = QHBoxLayout()
         grid_layout.addWidget(QLabel(self.tr('DMax:')))
         self.lineEdit_OK_DMax = QtWidgets.QLineEdit('1000.0')
@@ -77,7 +80,7 @@ class VariogramView(QWidget):
         layout.addWidget(grid_group)
 
         # Statistics
-        stats_group = QGroupBox(self.tr('Qualidade do Ajuste'))
+        stats_group = QGroupBox(self.tr('Fit Quality'))
         stats_layout = QHBoxLayout()
         stats_layout.addWidget(QLabel(self.tr('RMSE:')))
         self.lineEdit_Var_RMSE = QtWidgets.QLineEdit('0.0')
@@ -94,22 +97,24 @@ class VariogramView(QWidget):
         btn_layout = QHBoxLayout()
         self.pushButton_VariogramaReset = QPushButton(self.tr('Reset'))
         btn_layout.addWidget(self.pushButton_VariogramaReset)
-        self.pushButton_VariogramaAjust = QPushButton(self.tr('Ajustar'))
+        self.pushButton_VariogramaAjust = QPushButton(self.tr('Fit'))
+        self.pushButton_VariogramaAjust.setObjectName('primaryButton')
+        self.pushButton_VariogramaAjust.setCursor(QtCore.Qt.PointingHandCursor)
         btn_layout.addWidget(self.pushButton_VariogramaAjust)
-        self.pushButton_VariogramaSave = QPushButton(self.tr('Salvar'))
+        self.pushButton_VariogramaSave = QPushButton(self.tr('Save'))
         btn_layout.addWidget(self.pushButton_VariogramaSave)
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
 
         # Variogram plot
-        self.label_Variograma = QtWidgets.QLabel(self.tr('Variograma...'))
+        self.label_Variograma = QtWidgets.QLabel(self.tr('Variogram...'))
         self.label_Variograma.setMinimumHeight(250)
         layout.addWidget(self.label_Variograma)
 
         # Saved semivariograms table (one row per target variable). Column 0 is a
         # checkbox used to mark variables for batch kriging; columns 1..11 hold the
         # saved parameters. Reloaded from 0_Semivariograms_<layer>.csv.
-        semiv_group = QGroupBox(self.tr('Semivariogramas Salvos'))
+        semiv_group = QGroupBox(self.tr('Saved Semivariograms'))
         semiv_layout = QVBoxLayout()
         self.datatable_semivariogramas = QTableWidget()
         self.datatable_semivariogramas.setMinimumHeight(150)

@@ -8,6 +8,8 @@ from qgis.PyQt.QtWidgets import (
 )
 from qgis.gui import QgsMapLayerComboBox
 
+from .styles import tune_layout
+
 
 class SVMView(QWidget):
     """SVM training and prediction view."""
@@ -20,19 +22,20 @@ class SVMView(QWidget):
     def _setup_ui(self):
         """Build SVM view UI."""
         layout = QVBoxLayout()
+        tune_layout(layout)
 
         # Target variable label
         self.label_VTargetSVM = QLabel(self.tr('Z') + ': ')
         layout.addWidget(self.label_VTargetSVM)
 
         # Data source
-        source_group = QGroupBox(self.tr('Fonte de Dados'))
+        source_group = QGroupBox(self.tr('Data Source'))
         source_layout = QHBoxLayout()
-        source_layout.addWidget(QLabel(self.tr('Fonte:')))
+        source_layout.addWidget(QLabel(self.tr('Source:')))
         self.comboBox_SVM_Fonte = QComboBox()
-        self.comboBox_SVM_Fonte.addItems([self.tr('Tabela de Atributos'), self.tr('Layer Densa')])
+        self.comboBox_SVM_Fonte.addItems([self.tr('Attribute Table'), self.tr('Dense Layer')])
         source_layout.addWidget(self.comboBox_SVM_Fonte)
-        self.label_SVM_DenseLayer = QLabel(self.tr('Layer Densa:'))
+        self.label_SVM_DenseLayer = QLabel(self.tr('Dense Layer:'))
         source_layout.addWidget(self.label_SVM_DenseLayer)
         self.mMapLayerComboBox_DenseLayer = QgsMapLayerComboBox()
         source_layout.addWidget(self.mMapLayerComboBox_DenseLayer)
@@ -41,16 +44,16 @@ class SVMView(QWidget):
         layout.addWidget(source_group)
 
         # Search neighbourhood parameters (Number of neighbours / radius / IDW power)
-        search_group = QGroupBox(self.tr('Vizinhança de Busca'))
+        search_group = QGroupBox(self.tr('Search Neighbourhood'))
         search_layout = QHBoxLayout()
-        search_layout.addWidget(QLabel(self.tr('Nr. Máx. Vizinhos:')))
+        search_layout.addWidget(QLabel(self.tr('Max. Neighbours:')))
         self.lineEdit_SVM_VBNumMax = QLineEdit()
         self.lineEdit_SVM_VBNumMax.setText('16')
         search_layout.addWidget(self.lineEdit_SVM_VBNumMax)
-        search_layout.addWidget(QLabel(self.tr('Raio de Busca:')))
+        search_layout.addWidget(QLabel(self.tr('Search Radius:')))
         self.lineEdit_SVM_VBRaio = QLineEdit()
         search_layout.addWidget(self.lineEdit_SVM_VBRaio)
-        search_layout.addWidget(QLabel(self.tr('Peso IDW:')))
+        search_layout.addWidget(QLabel(self.tr('IDW Power:')))
         self.doubleSpinBox_Weight_IDW = QDoubleSpinBox()
         self.doubleSpinBox_Weight_IDW.setDecimals(1)
         self.doubleSpinBox_Weight_IDW.setMinimum(0.1)
@@ -63,17 +66,17 @@ class SVMView(QWidget):
         layout.addWidget(search_group)
 
         # Feature management
-        feat_group = QGroupBox(self.tr('Gerenciar Features'))
+        feat_group = QGroupBox(self.tr('Manage Features'))
         feat_layout = QHBoxLayout()
         self.comboBox_SVM_Features = QComboBox()
-        feat_layout.addWidget(QLabel(self.tr('Variáveis:')))
+        feat_layout.addWidget(QLabel(self.tr('Variables:')))
         feat_layout.addWidget(self.comboBox_SVM_Features)
-        self.pushButton_SVM_Add_Feature = QPushButton(self.tr('Adicionar'))
+        self.pushButton_SVM_Add_Feature = QPushButton(self.tr('Add'))
         feat_layout.addWidget(self.pushButton_SVM_Add_Feature)
         self.comboBox_SVM_Features_Adds = QComboBox()
-        feat_layout.addWidget(QLabel(self.tr('Remover:')))
+        feat_layout.addWidget(QLabel(self.tr('Remove:')))
         feat_layout.addWidget(self.comboBox_SVM_Features_Adds)
-        self.pushButton_SVM_Remove_Feature = QPushButton(self.tr('Remover'))
+        self.pushButton_SVM_Remove_Feature = QPushButton(self.tr('Remove'))
         feat_layout.addWidget(self.pushButton_SVM_Remove_Feature)
         feat_layout.addStretch()
         feat_group.setLayout(feat_layout)
@@ -89,7 +92,7 @@ class SVMView(QWidget):
         layout.addLayout(spatial_layout)
 
         # Moran results
-        moran_group = QGroupBox(self.tr('Correlação Espacial (Moran)'))
+        moran_group = QGroupBox(self.tr('Spatial Correlation (Moran)'))
         moran_layout = QVBoxLayout()
         self.datatable_moran = QTableWidget()
         moran_layout.addWidget(self.datatable_moran)
@@ -106,11 +109,13 @@ class SVMView(QWidget):
 
         # Buttons
         btn_layout = QHBoxLayout()
-        self.pushButton_SVM_Add_Selected_Features = QPushButton(self.tr('Adicionar Selecionadas'))
+        self.pushButton_SVM_Add_Selected_Features = QPushButton(self.tr('Add Selected'))
         btn_layout.addWidget(self.pushButton_SVM_Add_Selected_Features)
-        self.pushButton_SVM = QPushButton(self.tr('Executar SVM'))
+        self.pushButton_SVM = QPushButton(self.tr('Run SVM'))
+        self.pushButton_SVM.setObjectName('primaryButton')
+        self.pushButton_SVM.setCursor(QtCore.Qt.PointingHandCursor)
         btn_layout.addWidget(self.pushButton_SVM)
-        self.pushButton_Validacao_Cruzada_SVM = QPushButton(self.tr('Validação Cruzada'))
+        self.pushButton_Validacao_Cruzada_SVM = QPushButton(self.tr('Cross-Validation'))
         btn_layout.addWidget(self.pushButton_Validacao_Cruzada_SVM)
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
@@ -128,29 +133,29 @@ class SVMView(QWidget):
         self.datatable_SVM_Trainlabels = QTableWidget()
         train_layout.addWidget(self.datatable_SVM_Trainlabels)
         train_widget.setLayout(train_layout)
-        self.tabWidget_Interpolacao_SVM.addTab(train_widget, self.tr('Features de Treino'))
+        self.tabWidget_Interpolacao_SVM.addTab(train_widget, self.tr('Training Features'))
 
         # Tab 1: cross-validation
         cv_widget = QWidget()
         cv_layout = QVBoxLayout()
         self.datatable_validacao_cruzada_SVM = QTableWidget()
         cv_layout.addWidget(self.datatable_validacao_cruzada_SVM)
-        self.label_validacao_cruzada_SVM = QtWidgets.QLabel(self.tr('Gráfico CV SVM...'))
+        self.label_validacao_cruzada_SVM = QtWidgets.QLabel(self.tr('SVM CV Plot...'))
         self.label_validacao_cruzada_SVM.setMinimumHeight(200)
         cv_layout.addWidget(self.label_validacao_cruzada_SVM)
         cv_widget.setLayout(cv_layout)
-        self.tabWidget_Interpolacao_SVM.addTab(cv_widget, self.tr('Validação Cruzada'))
+        self.tabWidget_Interpolacao_SVM.addTab(cv_widget, self.tr('Cross-Validation'))
 
         # Tab 2: interpolated points + map
         points_widget = QWidget()
         points_layout = QVBoxLayout()
         self.datatable_pontos_interpolados_SVM = QTableWidget()
         points_layout.addWidget(self.datatable_pontos_interpolados_SVM)
-        self.label_SVM = QtWidgets.QLabel(self.tr('Mapa SVM...'))
+        self.label_SVM = QtWidgets.QLabel(self.tr('SVM Map...'))
         self.label_SVM.setMinimumHeight(200)
         points_layout.addWidget(self.label_SVM)
         points_widget.setLayout(points_layout)
-        self.tabWidget_Interpolacao_SVM.addTab(points_widget, self.tr('Pontos Interpolados'))
+        self.tabWidget_Interpolacao_SVM.addTab(points_widget, self.tr('Interpolated Points'))
 
         layout.addWidget(self.tabWidget_Interpolacao_SVM)
 

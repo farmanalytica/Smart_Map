@@ -242,15 +242,15 @@ class smart_map:
     def _install_translator(self):
         """Auto-detect the UI language from the QGIS locale (default English).
 
-        Source strings are Portuguese. English is the default: the pt->en
-        translation is installed unless QGIS is set to Portuguese, in which case
-        the source (Portuguese) strings are shown as-is. No manual language switch.
+        Source strings are English. English is the default and is shown as-is
+        (no translator). If QGIS is set to Portuguese, the en->pt translation is
+        installed when available (best effort). No manual language switch.
         """
         locale = QgsSettings().value('locale/userLocale', 'en_US')
         self.language = 'Portuguese' if str(locale).lower().startswith('pt') else 'English'
 
-        if self.language == 'English':
-            locale_path = os.path.join(self.plugin_dir, 'i18n', 'smart_map_pt_to_en.qm')
+        if self.language == 'Portuguese':
+            locale_path = os.path.join(self.plugin_dir, 'i18n', 'smart_map_en_to_pt.qm')
             if os.path.exists(locale_path):
                 self.translator = QTranslator()
                 self.translator.load(locale_path)
@@ -260,7 +260,7 @@ class smart_map:
     def closeEvent(self, event):
 
 
-        close = QMessageBox.question(self.dlg, self.tr('Mensagem'), self.tr('Deseja realmente sair?'), QMessageBox.Yes | QMessageBox.No)
+        close = QMessageBox.question(self.dlg, self.tr('Message'), self.tr('Do you really want to exit?'), QMessageBox.Yes | QMessageBox.No)
 
         if close == QMessageBox.Yes:
 

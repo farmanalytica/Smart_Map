@@ -61,8 +61,8 @@ class KrigingController:
         """Execute ordinary kriging interpolation."""
         if not self.variogram_ctrl.Variogram:
             self._show_warning(
-                self.tr('Mensagem'),
-                self.tr('Ajuste do Semivariograma não realizado.')
+                self.tr('Message'),
+                self.tr('Semivariogram fit not performed.')
             )
             return
 
@@ -115,7 +115,7 @@ class KrigingController:
             # Progress dialog
             maximum = (len(xygrid) * 3) + 5
             progress = self._create_progress_dialog(
-                self.tr('Krigagem Ordinária') + '...',
+                self.tr('Ordinary Kriging') + '...',
                 maximum
             )
 
@@ -158,8 +158,8 @@ class KrigingController:
             self.view.datatable_pontos_interpolados_OK.setRowCount(len(df_results.index))
 
             cols = list(df_results.columns.values)
-            cols[2] = self.tr('Z.Predito')
-            cols[3] = self.tr('Desv.Pad.')
+            cols[2] = self.tr('Z.Predicted')
+            cols[3] = self.tr('Std.Dev.')
             self.view.datatable_pontos_interpolados_OK.setHorizontalHeaderLabels(cols)
 
             for i in range(len(df_results.index)):
@@ -304,12 +304,12 @@ class KrigingController:
             progress.close()
 
         except Exception as e:
-            self._show_warning(self.tr('Erro'), self.tr('Erro na Krigagem') + ': ' + str(e))
+            self._show_warning(self.tr('Error'), self.tr('Kriging error') + ': ' + str(e))
 
     def _plot_interpolated_map(self):
         """Render the interpolated kriging map and set the label pixmap."""
         plt3.close()
-        plt3.title(self.tr('Mapa Interpolado Krigagem'))
+        plt3.title(self.tr('Kriging Interpolated Map'))
         plt3.xlabel('Longitude (X)')
         plt3.ylabel('Latitude  (Y)')
 
@@ -362,8 +362,8 @@ class KrigingController:
         """
         msg = QMessageBox.question(
             self.view,
-            self.tr('Mensagem'),
-            self.tr('Os mapas interpolados serão exportados para o QGIS. Deseja continuar?'),
+            self.tr('Message'),
+            self.tr('The interpolated maps will be exported to QGIS. Continue?'),
             QMessageBox.Yes | QMessageBox.No
         )
 
@@ -516,8 +516,8 @@ class KrigingController:
         """Execute kriging cross-validation (leave-one-out)."""
         if not self.variogram_ctrl.Variogram:
             self._show_warning(
-                self.tr('Mensagem'),
-                self.tr('Ajuste do Semivariograma não realizado.')
+                self.tr('Message'),
+                self.tr('Semivariogram fit not performed.')
             )
             return
 
@@ -530,7 +530,7 @@ class KrigingController:
 
             maximum = len(self.data_ctrl.data) + (len(self.data_ctrl.data) * 4)
             progress = self._create_progress_dialog(
-                self.tr('Validação Cruzada - Krigagem') + '...',
+                self.tr('Cross-Validation - Kriging') + '...',
                 maximum
             )
 
@@ -557,7 +557,7 @@ class KrigingController:
 
             self.df_CV_OK = pd.DataFrame(
                 np.atleast_2d(data_CV_OK),
-                columns=['Coord_X', 'Coord_Y', self.tr('Z.Obs.'), self.tr('Z.Predito')]
+                columns=['Coord_X', 'Coord_Y', self.tr('Z.Obs.'), self.tr('Z.Predicted')]
             )
 
             csv_path = os.path.join(self.path_absolute,
@@ -613,14 +613,14 @@ class KrigingController:
             x_max = x_max + abs(intercept)
 
             plt5.close()
-            plt5.title(self.tr('Validação Cruzada - Krigagem') + '   ' +
+            plt5.title(self.tr('Cross-Validation - Kriging') + '   ' +
                        self.tr('RMSE:') + ' ' + str(RMSE_lib) + '   $R^2$ : ' + str(R2_RCV))
 
             plt5.xlim(x_min, x_max)
             plt5.ylim(x_min, x_max)
 
-            plt5.xlabel(self.tr('Valor Predito') + ' - ' + self.data_ctrl.v_target)
-            plt5.ylabel(self.tr('Valor Observado') + ' - ' + self.data_ctrl.v_target)
+            plt5.xlabel(self.tr('Predicted Value') + ' - ' + self.data_ctrl.v_target)
+            plt5.ylabel(self.tr('Observed Value') + ' - ' + self.data_ctrl.v_target)
 
             plt5.scatter(labels_OK_CV, labels, marker='s', color='blue')
             plt5.plot([x_min, x_max], [x_min, x_max], linestyle=':', color='black')
@@ -661,7 +661,7 @@ class KrigingController:
             progress.close()
 
         except Exception as e:
-            self._show_warning(self.tr('Erro'), self.tr('Erro na Validação Cruzada') + ': ' + str(e))
+            self._show_warning(self.tr('Error'), self.tr('Cross-Validation error') + ': ' + str(e))
 
     def on_cross_validation_results_double_clicked(self, item):
         """Open the cross-validation CSV."""
@@ -703,7 +703,7 @@ class KrigingController:
     # --------------------------------------------------------------- helpers
     def _create_progress_dialog(self, label, max_val):
         """Create progress dialog."""
-        progress = QProgressDialog(label, self.tr('Cancelar'), 1, max_val, self.view)
+        progress = QProgressDialog(label, self.tr('Cancel'), 1, max_val, self.view)
         progress.setWindowTitle('Smart-Map')
         progress.show()
         progress.setCancelButton(None)

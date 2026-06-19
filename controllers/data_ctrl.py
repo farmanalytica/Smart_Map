@@ -223,10 +223,10 @@ class DataController:
         crs = layer.crs()
         if crs.isGeographic():
             msg = (
-                self.tr('O Sistema de Coordenadas Geográficas deve estar em UTM.') + '\n' +
-                self.tr('Realize a conversão da layer de entrada para a projeção UTM antes de importá-la no Smart-Map.')
+                self.tr('The coordinate system must be in UTM.') + '\n' +
+                self.tr('Reproject the input layer to UTM before importing it into Smart-Map.')
             )
-            self._show_warning(self.tr('Mensagem'), msg)
+            self._show_warning(self.tr('Message'), msg)
             return False
         return True
 
@@ -236,19 +236,19 @@ class DataController:
             return True
 
         msg = (
-            self.tr('A layer selecionada possui ') + str(len(layer)) +
-            self.tr(' pontos amostrados.') + '\n' +
-            self.tr('O limite máximo suportado pelo plugin para a layer de entrada é: ') +
-            str(self.maximum_points_plugin) + self.tr(' pontos.') + '\n' +
-            self.tr('Deseja realizar uma reamostragem de pontos?')
+            self.tr('The selected layer has ') + str(len(layer)) +
+            self.tr(' sampled points.') + '\n' +
+            self.tr('The maximum number of input points supported by the plugin is: ') +
+            str(self.maximum_points_plugin) + self.tr(' points.') + '\n' +
+            self.tr('Do you want to resample the points?')
         )
-        result = QMessageBox.question(self.dialog, self.tr('Mensagem'), msg,
+        result = QMessageBox.question(self.dialog, self.tr('Message'), msg,
                                      QMessageBox.Yes | QMessageBox.No)
         return result == QMessageBox.Yes
 
     def _load_layer_to_dataframe(self, layer):
         """Load QGIS layer to pandas dataframe."""
-        progress = self._create_progress_dialog('Importando tabela de atributos...', 10)
+        progress = self._create_progress_dialog('Importing attribute table...', 10)
 
         try:
             # Export layer to CSV
@@ -273,7 +273,7 @@ class DataController:
 
     def _extract_coordinates(self, layer, progress):
         """Extract X, Y coordinates from layer geometries."""
-        progress = self._create_progress_dialog('Calculando Coordenadas da Layer...', len(layer))
+        progress = self._create_progress_dialog('Calculating layer coordinates...', len(layer))
 
         coord_x = []
         coord_y = []
@@ -329,20 +329,20 @@ class DataController:
 
             if rows_to_drop:
                 msg = (
-                    self.tr('Existem') + ': ' + str(len(rows_to_drop)) + ' ' +
-                    self.tr('valores nulos na tabela.') + '\n' +
-                    self.tr('Linha(s)') + ': ' + str(rows_to_drop) + ' ' +
-                    self.tr('foram excluídas.')
+                    self.tr('There are') + ': ' + str(len(rows_to_drop)) + ' ' +
+                    self.tr('null values in the table.') + '\n' +
+                    self.tr('Row(s)') + ': ' + str(rows_to_drop) + ' ' +
+                    self.tr('were removed.')
                 )
-                self._show_warning(self.tr('Mensagem'), msg)
+                self._show_warning(self.tr('Message'), msg)
 
         # Resample if needed
         if len(self.df) > self.maximum_points_plugin * 1.2:
             self.df = self.resample_points(self.df)
 
             result = QMessageBox.question(
-                self.dialog, self.tr('Mensagem'),
-                self.tr('Deseja salvar os pontos reamostrados em uma nova layer Qgis?'),
+                self.dialog, self.tr('Message'),
+                self.tr('Do you want to save the resampled points as a new QGIS layer?'),
                 QMessageBox.Yes | QMessageBox.No
             )
 
@@ -572,7 +572,7 @@ class DataController:
         df_display = self.df[['ID_SM', self.Cord_X, self.Cord_Y, self.v_target]]
 
         progress = self._create_progress_dialog(
-            'Importando tabela de atributos...',
+            'Importing attribute table...',
             len(df_display.index) * len(df_display.columns)
         )
 
@@ -696,7 +696,7 @@ class DataController:
 
         maximum = (len(cols) - 3)   # discard CoordX_SM, CoordY_SM, ID_SM
         progress = self._create_progress_dialog(
-            self.tr('Reamostragem da tabela de atributos...'), maximum
+            self.tr('Resampling attribute table...'), maximum
         )
 
         arr_resample = None
@@ -756,11 +756,11 @@ class DataController:
     def on_file_save_clicked(self):
         """Save data to file."""
         if self.df is None:
-            self._show_warning(self.tr('Aviso'), self.tr('Nenhum dado carregado.'))
+            self._show_warning(self.tr('Warning'), self.tr('No data loaded.'))
             return
 
         filepath, _ = QFileDialog.getSaveFileName(
-            self.dialog, self.tr('Salvar dados'), self.path_absolute,
+            self.dialog, self.tr('Save Data'), self.path_absolute,
             self.tr('CSV files (*.csv)')
         )
 
@@ -823,7 +823,7 @@ class DataController:
     # Helpers
     def _create_progress_dialog(self, label, max_val):
         """Create QProgressDialog."""
-        progress = QProgressDialog(label, self.tr('Cancelar'), 1, max_val, self.dialog)
+        progress = QProgressDialog(label, self.tr('Cancel'), 1, max_val, self.dialog)
         progress.setWindowTitle('Smart-Map')
         progress.show()
         progress.setCancelButton(None)

@@ -214,7 +214,7 @@ class VariogramController:
             self._configure_parameter_sliders(semiv, nugget, range_, sill)
 
         except Exception as e:
-            self._show_warning(self.tr('Erro'), str(e))
+            self._show_warning(self.tr('Error'), str(e))
         finally:
             # Reconnect model combo
             try:
@@ -313,7 +313,7 @@ class VariogramController:
 
             # Plot experimental
             plt2.scatter(self.lag, self.gamma, c=self.npoints, marker='s',
-                        cmap='RdYlGn', label=self.tr('Semivariograma Experimental'))
+                        cmap='RdYlGn', label=self.tr('Experimental Semivariogram'))
 
             # Plot theoretical (starts at nugget)
             model_text = self.view.comboBox_Modelo.currentText()
@@ -325,12 +325,12 @@ class VariogramController:
                 plt2.plot(np.insert(self.lag, 0, 0),
                          np.full(len(self.lag) + 1, self.variancia),
                          linestyle=':', color='black',
-                         label=self.tr('Variância Amostral'))
+                         label=self.tr('Sample Variance'))
 
             plt2.xlim(0, plt2.xlim()[1])
-            plt2.title(self.tr('Variograma Isotrópico'))
-            plt2.ylabel(self.tr('Semivariância'))
-            plt2.xlabel(self.tr('Distância') + ' (h)')
+            plt2.title(self.tr('Isotropic Variogram'))
+            plt2.ylabel(self.tr('Semivariance'))
+            plt2.xlabel(self.tr('Distance') + ' (h)')
 
             # Colorbar
             m0 = int(np.floor(self.npoints.min()))
@@ -338,7 +338,7 @@ class VariogramController:
             marks = [int(k * (m6 - m0) / 6.0 + m0) for k in range(7)]
 
             cbar = plt2.colorbar(aspect=30)
-            cbar.ax.set_title(self.tr('Pares de') + '\n' + self.tr('pontos'))
+            cbar.ax.set_title(self.tr('Point') + '\n' + self.tr('pairs'))
             cbar.set_ticks(marks)
             cbar.set_ticklabels(marks)
 
@@ -384,7 +384,7 @@ class VariogramController:
             self.Variogram = True
 
         except Exception as e:
-            self._show_warning(self.tr('Erro'), str(e))
+            self._show_warning(self.tr('Error'), str(e))
 
     # Model selection
     def on_model_combo_changed(self, value):
@@ -597,8 +597,8 @@ class VariogramController:
         """Adjust variogram with current parameters."""
         if not self.Var_Selected:
             self._show_warning(
-                self.tr('Mensagem'),
-                self.tr('Faça a seleção de atributos(variáveis) na Tabela de Atributos e clique no botão Selecionar.')
+                self.tr('Message'),
+                self.tr('Select attributes (variables) in the Attribute Table and click the Select button.')
             )
             return
 
@@ -674,8 +674,8 @@ class VariogramController:
                 if Z == self.df_semivariograms.iloc[i, 0]:
                     semiv_calculated = True
                     msg = QMessageBox.question(
-                        data_view, self.tr('Mensagem'),
-                        self.tr('Deseja substituir o semivariograma de: ') + Z + ' ?',
+                        data_view, self.tr('Message'),
+                        self.tr('Replace the semivariogram for: ') + Z + ' ?',
                         QMessageBox.Yes | QMessageBox.No
                     )
                     if msg == QMessageBox.Yes:
@@ -708,9 +708,9 @@ class VariogramController:
 
         self.list_rows_semiv = []
 
-        cols = [self.tr('Marcar'), 'Z', self.tr('Modelo'), self.tr('Distância Máxima'),
-                self.tr('Distância (h)'), self.tr('Efeito Pepita'), self.tr('Contribuição'),
-                self.tr('Alcance'), self.tr('RMSE'), 'R2', self.tr('Raio'), self.tr('Vizinhos')]
+        cols = [self.tr('Mark'), 'Z', self.tr('Model'), self.tr('Maximum Distance'),
+                self.tr('Distance (h)'), self.tr('Nugget'), self.tr('Sill'),
+                self.tr('Range'), self.tr('RMSE'), 'R2', self.tr('Radius'), self.tr('Neighbors')]
 
         table = self.view.datatable_semivariogramas
 
@@ -723,8 +723,8 @@ class VariogramController:
             try:
                 table.setHorizontalHeaderLabels(cols)
             except AttributeError:
-                self._show_warning(self.tr('Mensagem'),
-                                   self.tr('Erro ao carregar tabela. Valor Inválido!'))
+                self._show_warning(self.tr('Message'),
+                                   self.tr('Error loading table. Invalid value!'))
 
             try:
                 for i in range(len(self.df_semivariograms.index)):
@@ -743,8 +743,8 @@ class VariogramController:
                                 pass
                         table.setItem(i, j + 1, QTableWidgetItem(str(valor)))
             except AttributeError:
-                self._show_warning(self.tr('Mensagem'),
-                                   self.tr('Erro ao carregar tabela. Valor Inválido!'))
+                self._show_warning(self.tr('Message'),
+                                   self.tr('Error loading table. Invalid value!'))
 
             table.resizeColumnsToContents()
             table.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
@@ -756,8 +756,8 @@ class VariogramController:
             try:
                 table.setHorizontalHeaderLabels(cols)
             except AttributeError:
-                self._show_warning(self.tr('Mensagem'),
-                                   self.tr('Erro ao carregar tabela. Valor Inválido!'))
+                self._show_warning(self.tr('Message'),
+                                   self.tr('Error loading table. Invalid value!'))
 
     def on_semivariogram_table_double_clicked(self):
         """Reload a previously-saved semivariogram for the double-clicked row.

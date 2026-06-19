@@ -234,8 +234,8 @@ class GridController:
         geom_type = layer.geometryType()
         if geom_type not in (0, 2):  # Point or Polygon
             self._show_warning(
-                self.tr('Mensagem'),
-                self.tr('Layer QGIS Inválida! Selecione uma Layer QGIS tipo: PointLayer ou PoligonLayer.')
+                self.tr('Message'),
+                self.tr('Invalid QGIS layer! Select a QGIS layer of type: PointLayer or PolygonLayer.')
             )
             return
 
@@ -247,8 +247,8 @@ class GridController:
         if layer_authid != self.lyrCRS_table_atribute:
             if 'SAD69' not in layer_crs.description():
                 self._show_warning(
-                    self.tr('Mensagem'),
-                    self.tr('O CRS da Layer de Contorno é diferente do CRS da Layer da Tabela de Atributos.')
+                    self.tr('Message'),
+                    self.tr('The boundary layer CRS differs from the attribute table layer CRS.')
                 )
                 return
 
@@ -268,10 +268,10 @@ class GridController:
         """Check if layer CRS is projected (not geographic)."""
         if layer_crs.isGeographic():
             msg = (
-                self.tr('O Sistema de Coordenadas Geográficas deve estar em UTM.') + '\n' +
-                self.tr('Realize a conversão da layer de entrada para a projeção UTM antes de importá-la no Smart-Map.')
+                self.tr('The coordinate system must be in UTM.') + '\n' +
+                self.tr('Reproject the input layer to UTM before importing it into Smart-Map.')
             )
-            self._show_warning(self.tr('Mensagem'), msg)
+            self._show_warning(self.tr('Message'), msg)
             return False
         return True
 
@@ -418,7 +418,7 @@ class GridController:
 
             self.dialog.datatable_limite.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
         except (AttributeError, ValueError):
-            self._show_warning(self.tr('Mensagem'), self.tr('Erro ao carregar tabela. Valor Inválido!'))
+            self._show_warning(self.tr('Message'), self.tr('Error loading table. Invalid value!'))
 
     def _plot_boundary(self):
         """Plot data points with boundary polygon."""

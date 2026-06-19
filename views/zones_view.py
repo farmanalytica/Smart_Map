@@ -29,6 +29,8 @@ from qgis.PyQt.QtWidgets import (
     QTabWidget,
 )
 
+from .styles import tune_layout
+
 
 class ZonesView(QWidget):
     """Management zones clustering view (file-driven workflow)."""
@@ -41,6 +43,7 @@ class ZonesView(QWidget):
     def _setup_ui(self):
         """Build zones view UI."""
         layout = QVBoxLayout()
+        tune_layout(layout)
 
         # The whole zones workflow lives inside a tab widget so the controller
         # can drive the user through Maps -> Vars -> FPI/NCE -> Class.
@@ -50,39 +53,39 @@ class ZonesView(QWidget):
         maps_widget = QWidget()
         maps_layout = QVBoxLayout()
 
-        maps_group = QGroupBox(self.tr('Mapas Interpolados Disponíveis'))
+        maps_group = QGroupBox(self.tr('Available Interpolated Maps'))
         maps_group_layout = QVBoxLayout()
         self.datatable_ZM_Maps = QTableWidget()
         maps_group_layout.addWidget(self.datatable_ZM_Maps)
         self.pushButton_ZM_Add_All_Vars_Selected = QPushButton(
-            self.tr('Adicionar Todas as Variáveis Selecionadas'))
+            self.tr('Add All Selected Variables'))
         self.pushButton_ZM_Add_All_Vars_Selected.setEnabled(False)
         maps_group_layout.addWidget(self.pushButton_ZM_Add_All_Vars_Selected)
         maps_group.setLayout(maps_group_layout)
         maps_layout.addWidget(maps_group)
 
         # Add a single variable from a file via QFileDialog.
-        add_group = QGroupBox(self.tr('Adicionar Variável (Arquivo)'))
+        add_group = QGroupBox(self.tr('Add Variable (File)'))
         add_layout = QHBoxLayout()
-        self.pushButton_ZM_Add_Var = QPushButton(self.tr('Adicionar Variável...'))
+        self.pushButton_ZM_Add_Var = QPushButton(self.tr('Add Variable...'))
         add_layout.addWidget(self.pushButton_ZM_Add_Var)
         add_layout.addStretch()
         add_group.setLayout(add_layout)
         maps_layout.addWidget(add_group)
 
         maps_widget.setLayout(maps_layout)
-        self.tabWidget_ZM.addTab(maps_widget, self.tr('Mapas'))
+        self.tabWidget_ZM.addTab(maps_widget, self.tr('Maps'))
 
         # ---------------------------------------------------------- Tab 1: Vars
         vars_widget = QWidget()
         vars_layout = QVBoxLayout()
 
-        self.groupBox_ZM_Remove_Var = QGroupBox(self.tr('Remover Variável'))
+        self.groupBox_ZM_Remove_Var = QGroupBox(self.tr('Remove Variable'))
         remove_layout = QHBoxLayout()
-        remove_layout.addWidget(QLabel(self.tr('Variável:')))
+        remove_layout.addWidget(QLabel(self.tr('Variable:')))
         self.comboBox_ZM_var = QComboBox()
         remove_layout.addWidget(self.comboBox_ZM_var)
-        self.pushButton_ZM_Remove_Var = QPushButton(self.tr('Remover'))
+        self.pushButton_ZM_Remove_Var = QPushButton(self.tr('Remove'))
         remove_layout.addWidget(self.pushButton_ZM_Remove_Var)
         remove_layout.addStretch()
         self.groupBox_ZM_Remove_Var.setLayout(remove_layout)
@@ -90,7 +93,7 @@ class ZonesView(QWidget):
         self.pushButton_ZM_Remove_Var.setEnabled(False)
         vars_layout.addWidget(self.groupBox_ZM_Remove_Var)
 
-        vars_group = QGroupBox(self.tr('Variáveis para Zonas de Manejo'))
+        vars_group = QGroupBox(self.tr('Variables for Management Zones'))
         vars_group_layout = QVBoxLayout()
         self.datatable_ZM = QTableWidget()
         vars_group_layout.addWidget(self.datatable_ZM)
@@ -98,7 +101,7 @@ class ZonesView(QWidget):
         vars_layout.addWidget(vars_group)
 
         vars_widget.setLayout(vars_layout)
-        self.tabWidget_ZM.addTab(vars_widget, self.tr('Variáveis'))
+        self.tabWidget_ZM.addTab(vars_widget, self.tr('Variables'))
 
         # ------------------------------------------------------ Tab 2: FPI/NCE
         fpi_widget = QWidget()
@@ -106,17 +109,17 @@ class ZonesView(QWidget):
 
         # Fuzzy c-means parameters (user-set; NOT hardcoded in the manager).
         self.groupBox_ZM_Calc_Nr_Ideal_ZM = QGroupBox(
-            self.tr('Calcular Número Ideal de Zonas (FPI / NCE)'))
+            self.tr('Compute Optimal Number of Zones (FPI / NCE)'))
         params_layout = QHBoxLayout()
 
-        params_layout.addWidget(QLabel(self.tr('Iterações:')))
+        params_layout.addWidget(QLabel(self.tr('Iterations:')))
         self.spinBox_ZM_Iter = QSpinBox()
         self.spinBox_ZM_Iter.setMinimum(1)
         self.spinBox_ZM_Iter.setMaximum(10000)
         self.spinBox_ZM_Iter.setValue(100)
         params_layout.addWidget(self.spinBox_ZM_Iter)
 
-        params_layout.addWidget(QLabel(self.tr('Coef. Nebuloso (m):')))
+        params_layout.addWidget(QLabel(self.tr('Fuzziness Coef. (m):')))
         self.doubleSpinBox_ZM_CFuzzy = QDoubleSpinBox()
         self.doubleSpinBox_ZM_CFuzzy.setMinimum(1.01)
         self.doubleSpinBox_ZM_CFuzzy.setMaximum(10.0)
@@ -124,14 +127,14 @@ class ZonesView(QWidget):
         self.doubleSpinBox_ZM_CFuzzy.setValue(1.30)
         params_layout.addWidget(self.doubleSpinBox_ZM_CFuzzy)
 
-        self.checkBox_ZM_Normalizar = QCheckBox(self.tr('Normalizar'))
+        self.checkBox_ZM_Normalizar = QCheckBox(self.tr('Normalize'))
         self.checkBox_ZM_Normalizar.setChecked(True)
         params_layout.addWidget(self.checkBox_ZM_Normalizar)
 
-        self.checkBox_Qgis_Maps = QCheckBox(self.tr('Exibir Mapas'))
+        self.checkBox_Qgis_Maps = QCheckBox(self.tr('Show Maps'))
         params_layout.addWidget(self.checkBox_Qgis_Maps)
 
-        self.pushButton_ZM_Calc_Nr_Ideal_ZM = QPushButton(self.tr('Calcular FPI/NCE'))
+        self.pushButton_ZM_Calc_Nr_Ideal_ZM = QPushButton(self.tr('Compute FPI/NCE'))
         params_layout.addWidget(self.pushButton_ZM_Calc_Nr_Ideal_ZM)
         params_layout.addStretch()
         self.groupBox_ZM_Calc_Nr_Ideal_ZM.setLayout(params_layout)
@@ -140,9 +143,9 @@ class ZonesView(QWidget):
         fpi_layout.addWidget(self.groupBox_ZM_Calc_Nr_Ideal_ZM)
 
         # Number of zones + FPI/NCE readouts.
-        count_group = QGroupBox(self.tr('Número de Zonas'))
+        count_group = QGroupBox(self.tr('Number of Zones'))
         count_layout = QHBoxLayout()
-        count_layout.addWidget(QLabel(self.tr('Zonas:')))
+        count_layout.addWidget(QLabel(self.tr('Zones:')))
         self.spinBox_ZM_NrZonas = QSpinBox()
         self.spinBox_ZM_NrZonas.setMinimum(2)
         self.spinBox_ZM_NrZonas.setMaximum(20)
@@ -163,7 +166,7 @@ class ZonesView(QWidget):
         fpi_layout.addWidget(count_group)
 
         # FPI/NCE plot preview.
-        self.label_ZM_FPI_NCE = QLabel(self.tr('Gráfico FPI / NCE...'))
+        self.label_ZM_FPI_NCE = QLabel(self.tr('FPI / NCE Plot...'))
         self.label_ZM_FPI_NCE.setMinimumHeight(200)
         self.label_ZM_FPI_NCE.hide()
         fpi_layout.addWidget(self.label_ZM_FPI_NCE)
@@ -175,9 +178,11 @@ class ZonesView(QWidget):
         class_widget = QWidget()
         class_layout = QVBoxLayout()
 
-        self.groupBox_ZM_Calcular = QGroupBox(self.tr('Gerar Zonas de Manejo'))
+        self.groupBox_ZM_Calcular = QGroupBox(self.tr('Generate Management Zones'))
         calc_layout = QHBoxLayout()
-        self.pushButton_ZM_Calcular = QPushButton(self.tr('Calcular Zonas de Manejo'))
+        self.pushButton_ZM_Calcular = QPushButton(self.tr('Compute Management Zones'))
+        self.pushButton_ZM_Calcular.setObjectName('primaryButton')
+        self.pushButton_ZM_Calcular.setCursor(QtCore.Qt.PointingHandCursor)
         calc_layout.addWidget(self.pushButton_ZM_Calcular)
         calc_layout.addStretch()
         self.groupBox_ZM_Calcular.setLayout(calc_layout)
@@ -185,7 +190,7 @@ class ZonesView(QWidget):
         self.pushButton_ZM_Calcular.setEnabled(False)
         class_layout.addWidget(self.groupBox_ZM_Calcular)
 
-        result_group = QGroupBox(self.tr('Classificação das Zonas'))
+        result_group = QGroupBox(self.tr('Zone Classification'))
         result_layout = QVBoxLayout()
         self.datatable_ZM_Classe = QTableWidget()
         result_layout.addWidget(self.datatable_ZM_Classe)
@@ -193,13 +198,13 @@ class ZonesView(QWidget):
         class_layout.addWidget(result_group)
 
         # Class map preview.
-        self.label_ZM = QLabel(self.tr('Mapa de Zonas...'))
+        self.label_ZM = QLabel(self.tr('Zones Map...'))
         self.label_ZM.setMinimumHeight(200)
         self.label_ZM.hide()
         class_layout.addWidget(self.label_ZM)
 
         class_widget.setLayout(class_layout)
-        self.tabWidget_ZM.addTab(class_widget, self.tr('Zonas de Manejo'))
+        self.tabWidget_ZM.addTab(class_widget, self.tr('Management Zones'))
 
         layout.addWidget(self.tabWidget_ZM)
         self.setLayout(layout)
