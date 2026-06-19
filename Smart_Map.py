@@ -622,13 +622,13 @@ class smart_map:
         zones_view.pushButton_ZM_Add_Var.clicked.connect(
             self.zones_ctrl.on_add_var_clicked
         )
-        zones_view.pushButton_ZM_Add_All_Vars.clicked.connect(
+        zones_view.pushButton_ZM_Add_All_Vars_Selected.clicked.connect(
             self.zones_ctrl.on_add_all_selected_vars_clicked
         )
         zones_view.pushButton_ZM_Remove_Var.clicked.connect(
             self.zones_ctrl.on_remove_var_clicked
         )
-        zones_view.pushButton_ZM_Calc_Nr_Ideal.clicked.connect(
+        zones_view.pushButton_ZM_Calc_Nr_Ideal_ZM.clicked.connect(
             self.zones_ctrl.on_calc_ideal_zones_clicked
         )
         zones_view.spinBox_ZM_NrZonas.valueChanged.connect(
@@ -637,6 +637,19 @@ class smart_map:
         zones_view.pushButton_ZM_Calcular.clicked.connect(
             self.zones_ctrl.on_calculate_zones_clicked
         )
+        zones_view.datatable_ZM_Maps.itemClicked.connect(
+            self.zones_ctrl.on_zone_maps_checkbox_clicked
+        )
+        zones_view.datatable_ZM.doubleClicked.connect(
+            self.zones_ctrl.on_zone_vars_table_double_clicked
+        )
+        zones_view.datatable_ZM_Classe.doubleClicked.connect(
+            self.zones_ctrl.on_zone_results_table_double_clicked
+        )
+        zones_view.label_ZM_FPI_NCE.mousePressEvent = \
+            self.zones_ctrl.on_fpi_nce_label_clicked
+        zones_view.label_ZM.mousePressEvent = \
+            self.zones_ctrl.on_zones_label_clicked
 
     def _svm_post_import(self):
         """Seed SVM state after a data import.
