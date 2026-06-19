@@ -16,6 +16,7 @@ from qgis.PyQt.QtGui import QIcon, QPixmap, QColor, QBrush
 from qgis.core import QgsVectorFileWriter, QgsPointXY, QgsGeometry, QgsProject
 
 from ..managers.data_manager import DataManager
+from ..managers.export_manager import ExportManager
 from ..utils import functions
 from ..krig import semivariogram
 
@@ -33,6 +34,9 @@ class DataController:
         self.tr = tr_func
 
         self.data_manager = DataManager()
+        # Heavy export logic (gdal_grid, color ramp, processing.run) lives here.
+        # The export_* methods below are thin delegators to this manager.
+        self.export_manager = ExportManager(iface, path_absolute)
 
         # Back-reference to the grid controller, set by Smart_Map._initialize_controllers
         # after both controllers are constructed. grid_ctrl is the single owner of the
@@ -738,27 +742,58 @@ class DataController:
         if filepath:
             self.df.to_csv(filepath, sep=',', index=False, encoding='utf-8')
 
-    # Export to QGIS
+    # Export to QGIS (thin delegators to ExportManager) ----------------------
+    def _zm_number_classes(self):
+        """Resolve the ZM color-ramp class count (zones domain widget; default 5)."""
+        spin = getattr(self.dialog, 'spinBox_ZM_NrZonas', None)
+        if spin is not None:
+            return spin.value()
+        return 5
+
     def export_raster_to_qgis(self, input_table, output_tiff, output_name, z_field):
-        """Export interpolated raster to QGIS via gdal_grid."""
-        # Core gdal_grid implementation
-        # Will be extracted from Smart_Map.py lines 8314-8556
-        pass
+        """Export interpolated raster to QGIS via gdal_grid (delegates to ExportManager)."""
+        # ZM pixel sizes are owned by the zones domain and may not be set on data_ctrl
+        # for kriging/SVM grids; fall back to the default pixel size when absent.
+        pixel_size_x_zm = getattr(self, 'Pixel_Size_X_ZM', self.Pixel_Size_X)
+        pixel_size_y_zm = getattr(self, 'Pixel_Size_Y_ZM', self.Pixel_Size_Y)
+
+        contour_checked = self.dialog.checkBox_Area_Contorno.isChecked()
+        contour_layer = None
+        if self.dialog.mMapLayerComboBox_AreaCont.currentIndex() >= 0:
+            contour_layer = self.dialog.mMapLayerComboBox_AreaCont.currentLayer()
+
+        source_layer = self.dialog.mMapLayerComboBox.currentLayer()
+
+        return self.export_manager.export_raster_to_qgis(
+            input_table, output_tiff, output_name, z_field,
+            self.Cord_X, self.Cord_Y,
+            self.Cord_X_min, self.Cord_X_max, self.Cord_Y_min, self.Cord_Y_max,
+            self.Pixel_Size_X, self.Pixel_Size_Y,
+            pixel_size_x_zm, pixel_size_y_zm,
+            source_layer,
+            contour_checked, contour_layer,
+            self._zm_number_classes(),
+        )
 
     def define_raster_color_ramp(self, layer, layer_name):
-        """Define raster color ramp."""
-        # Will be extracted from Smart_Map.py lines 8641-8712
-        pass
+        """Define raster color ramp (delegates to ExportManager)."""
+        return self.export_manager.define_raster_color_ramp(
+            layer, layer_name, self._zm_number_classes()
+        )
 
     def export_shapefile_to_qgis(self, input_path, alg_name):
-        """Export shapefile to QGIS."""
-        # Will be extracted from Smart_Map.py lines 8712-8760
-        pass
+        """Export raster pixels to points/polygons (delegates to ExportManager)."""
+        return self.export_manager.export_shapefile_to_qgis(
+            input_path, alg_name, self.v_target
+        )
 
     def export_shapefile_resampled_to_qgis(self, input_table, output_shp, output_name):
-        """Export resampled shapefile to QGIS."""
-        # Will be extracted from Smart_Map.py lines 8760+
-        pass
+        """Export resampled points to shapefile (delegates to ExportManager)."""
+        source_layer = self.dialog.mMapLayerComboBox.currentLayer()
+        return self.export_manager.export_shapefile_resampled_to_qgis(
+            input_table, output_shp, output_name,
+            self.Cord_X, self.Cord_Y, source_layer
+        )
 
     # Helpers
     def _create_progress_dialog(self, label, max_val):
