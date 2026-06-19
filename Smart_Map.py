@@ -50,8 +50,13 @@ from qgis.utils import plugins
 #Initialize Qt resources from file resources.py
 from . import resources
 
-#import resources 
+#import resources
 #from .resources import *
+
+
+# External deps (scikit-learn) are provisioned into extlibs/ and put on sys.path
+# by __init__.py before this module is imported (see extlibs_manager). Controllers
+# and managers import sklearn at module load, so no bootstrap is needed here.
 
 
 #Import the code for the dialog (new pure PyQt views)
@@ -99,8 +104,8 @@ import matplotlib.pyplot as plt7  #plot Management Zones
 from scipy import spatial                                  #to calculate IDW com cKDTree.query, KDTree.query_ball_point
 
 
-#import the code for the Utilities 
-from .utils import install_deps                            #Install deps on QGIS: sklearn, skfuzzy, pysal 
+#import the code for the Utilities
+#(install_deps is imported earlier, before the controller/manager imports)
 
 import numpy as np
 import pandas as pd 

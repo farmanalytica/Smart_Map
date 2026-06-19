@@ -48,6 +48,9 @@ htmlcov/
 *.qgz~
 execute_number.txt
 
+# Provisioned third-party deps (extracted at runtime by extlibs_manager)
+extlibs/
+
 # Build artifacts
 dist/
 build/

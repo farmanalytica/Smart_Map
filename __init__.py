@@ -25,6 +25,19 @@ __version__ = '0.1.0'
 """
 
 
+import os
+import sys
+
+# Put the local extlibs/ folder (provisioned third-party deps such as
+# scikit-learn) on sys.path BEFORE importing the plugin, so its module-level
+# `import sklearn` resolves. numpy/pandas/scipy come from QGIS and are not
+# shadowed; skfuzzy/pysal/krig are vendored in-tree.
+_plugin_dir = os.path.dirname(__file__)
+_extlibs_path = os.path.join(_plugin_dir, 'extlibs')
+if os.path.isdir(_extlibs_path) and _extlibs_path not in sys.path:
+    sys.path.insert(0, _extlibs_path)
+
+
 # noinspection PyPep8Naming
 def classFactory(iface):  # pylint: disable=invalid-name
     """Load smart_map class from file smart_map.
@@ -32,6 +45,12 @@ def classFactory(iface):  # pylint: disable=invalid-name
     :param iface: A QGIS interface instance.
     :type iface: QgsInterface
     """
-    #
+    # Provision (or re-provision after a QGIS Python upgrade) the deps matching
+    # the running interpreter before importing the plugin.
+    from . import extlibs_manager
+    if extlibs_manager.needs_provision():
+        extlibs_manager.provision()
+    extlibs_manager.ensure_on_path()
+
     from .Smart_Map import smart_map
     return smart_map(iface)
