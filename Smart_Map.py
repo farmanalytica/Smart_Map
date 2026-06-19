@@ -572,6 +572,51 @@ class smart_map:
         svm_view.pushButton_Validacao_Cruzada_SVM.clicked.connect(
             self.svm_ctrl.on_svm_cross_validation_clicked
         )
+        svm_view.pushButton_SVM_Add_Selected_Features.clicked.connect(
+            self.svm_ctrl.on_add_selected_features_clicked
+        )
+        svm_view.comboBox_SVM_Fonte.currentIndexChanged.connect(
+            self.svm_ctrl.on_source_layer_combo_changed
+        )
+        svm_view.mMapLayerComboBox_DenseLayer.currentIndexChanged.connect(
+            self.svm_ctrl.on_dense_layer_combo_changed
+        )
+        svm_view.datatable_moran.itemClicked.connect(
+            self.svm_ctrl.on_moran_checkbox_clicked
+        )
+        svm_view.lineEdit_SVM_VBNumMax.setValidator(QtGui.QIntValidator())
+        svm_view.lineEdit_SVM_VBNumMax.editingFinished.connect(
+            self.svm_ctrl.on_vb_num_max_edited
+        )
+        svm_view.lineEdit_SVM_VBRaio.setValidator(
+            QtGui.QDoubleValidator(notation=QtGui.QDoubleValidator.StandardNotation)
+        )
+        svm_view.lineEdit_SVM_VBRaio.editingFinished.connect(
+            self.svm_ctrl.on_vb_raio_edited
+        )
+        svm_view.datatable_SVM_Trainfeatures.doubleClicked.connect(
+            self.svm_ctrl.on_train_features_table_double_clicked
+        )
+        svm_view.datatable_pontos_interpolados_SVM.doubleClicked.connect(
+            self.svm_ctrl.on_interpolated_svm_points_table_double_clicked
+        )
+        svm_view.datatable_validacao_cruzada_SVM.doubleClicked.connect(
+            self.svm_ctrl.on_svm_cross_validation_table_double_clicked
+        )
+        svm_view.label_SVM.mousePressEvent = self.svm_ctrl.on_svm_label_clicked
+        svm_view.label_validacao_cruzada_SVM.mousePressEvent = (
+            self.svm_ctrl.on_svm_cross_validation_label_clicked
+        )
+
+        # Filter the dense-layer combo to point/raster layers (matches old behaviour).
+        svm_view.mMapLayerComboBox_DenseLayer.setFilters(
+            QgsMapLayerProxyModel.PointLayer | QgsMapLayerProxyModel.RasterLayer
+        )
+
+        # Seed the SVM model (coordinates + labels + feature combo) after each data
+        # import. Connected after data_ctrl.on_import_qgis_clicked so the dataframe,
+        # min/max distances and v_target are populated first.
+        data_view.import_clicked.connect(self._svm_post_import)
 
         # Wire zones view signals
         zones_view.pushButton_ZM_Add_Var.clicked.connect(
@@ -592,6 +637,27 @@ class smart_map:
         zones_view.pushButton_ZM_Calcular.clicked.connect(
             self.zones_ctrl.on_calculate_zones_clicked
         )
+
+    def _svm_post_import(self):
+        """Seed SVM state after a data import.
+
+        Establishes df_SVM_Trainfeatures (X, Y) / df_SVM_Trainlabels (v_target),
+        SVM-search bounds and line-edit defaults, then populates the SVM feature
+        combo from the attribute-table source (index 0). Runs after the data
+        controller's import handler so all data_ctrl state is ready.
+        """
+        if self.data_ctrl.df is None:
+            return
+        try:
+            self.svm_ctrl.seed_train_state()
+            svm_view = self.dlg.get_svm_view()
+            svm_view.label_VTargetSVM.setText(self.tr('Z') + ': ' + str(self.data_ctrl.v_target))
+            # Drive the source combo (attribute table) to populate the feature list.
+            svm_view.comboBox_SVM_Fonte.setCurrentIndex(0)
+            self.svm_ctrl.on_source_layer_combo_changed(0)
+        except Exception:
+            # SVM seeding is best-effort; never block the data import workflow.
+            pass
 
     def run(self):
         """Run method that performs all the real work"""
