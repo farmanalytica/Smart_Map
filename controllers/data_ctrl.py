@@ -1,17 +1,79 @@
 # -*- coding: utf-8 -*-
 """Data import, export, and layer management controller."""
 
+import os
+import time
+import numpy as np
+import pandas as pd
+import matplotlib.path as mplPath
+import matplotlib.pyplot as plt1
+import subprocess
+
+from qgis.PyQt import QtCore, QtWidgets, QtGui
+from qgis.PyQt.QtWidgets import QMessageBox, QFileDialog, QProgressDialog, QTableWidgetItem
+from qgis.PyQt.QtGui import QIcon, QPixmap, QColor, QBrush
+from qgis.core import QgsVectorFileWriter, QgsPointXY, QgsGeometry
+
+from ..managers.data_manager import DataManager
+from ..utils import functions
+from ..krig import semivariogram
+
 
 class DataController:
     """Handles data import/export and QGIS layer management."""
 
-    def __init__(self, dialog, iface):
+    def __init__(self, dialog, iface, plugin_dir, path_absolute, icon_path, language, tr_func):
         self.dialog = dialog
         self.iface = iface
+        self.plugin_dir = plugin_dir
+        self.path_absolute = path_absolute
+        self.icon_path = icon_path
+        self.language = language
+        self.tr = tr_func
+
+        self.data_manager = DataManager()
+
+        # Data state
+        self.df = None
+        self.data = None
+        self.data_outlier = None
+        self.xy = None
+        self.z = None
+        self.list_index_outlier = []
+        self.v_target = None
+        self.moran_index = None
+        self.p_value = None
+
+        # Grid state
+        self.Cord_X = 'CoordX_SM'
+        self.Cord_Y = 'CoordY_SM'
+        self.Cord_X_min = None
+        self.Cord_X_max = None
+        self.Cord_Y_min = None
+        self.Cord_Y_max = None
+        self.Pixel_Size_X = None
+        self.Pixel_Size_Y = None
+        self.Num_Points_X = None
+        self.Num_Points_Y = None
+
+        # Boundary
+        self.Contorno_Definido = False
+        self.df_limite = None
+
+        # Variogram
+        self.max_dist = None
+        self.min_dist = None
+        self.lag_distance_ini = None
+        self.active_distance_ini = None
+
+        # Parameters
+        self.maximum_points_plugin = 5000
+        self.VTarget_FileName = None
 
     # Layer selection & filtering
     def on_layer_combo_changed(self, index):
         """Handle attribute table layer selection."""
+        # Layer proxy filtering done in Smart_Map.py UI setup
         pass
 
     def on_vector_points_toggled(self, checked):
@@ -26,45 +88,488 @@ class DataController:
         """Filter raster layers."""
         pass
 
-    # Data import
+    # Data import - Main workflow
     def on_import_qgis_clicked(self):
-        """Import data from QGIS layer."""
-        pass
+        """Import data from QGIS layer (main workflow)."""
+        if self.dialog.mMapLayerComboBox.currentIndex() < 0:
+            return
 
+        selected_layer = self.dialog.mMapLayerComboBox.currentLayer()
+
+        # Validate CRS
+        if not self._validate_layer_crs(selected_layer):
+            return
+
+        # Check point count, resample if needed
+        if not self._check_point_count(selected_layer):
+            return
+
+        # Load data
+        self._load_layer_to_dataframe(selected_layer)
+
+        # Clean data
+        self._clean_data()
+
+        # Display in table
+        self.load_attribute_table()
+
+        # Calculate grid parameters
+        self._calculate_grid_params()
+
+        # Calculate Moran's I
+        self._calculate_morans_i()
+
+        # Plot points
+        self._plot_sampled_points()
+
+        # Initialize variogram
+        self._initialize_variogram()
+
+    def _validate_layer_crs(self, layer):
+        """Check if layer is in projected coordinates (not geographic)."""
+        crs = layer.crs()
+        if crs.isGeographic():
+            msg = (
+                self.tr('O Sistema de Coordenadas Geográficas deve estar em UTM.') + '\n' +
+                self.tr('Realize a conversão da layer de entrada para a projeção UTM antes de importá-la no Smart-Map.')
+            )
+            self._show_warning(self.tr('Mensagem'), msg)
+            return False
+        return True
+
+    def _check_point_count(self, layer):
+        """Check if point count exceeds limit, offer resampling."""
+        if len(layer) <= self.maximum_points_plugin * 1.2:
+            return True
+
+        msg = (
+            self.tr('A layer selecionada possui ') + str(len(layer)) +
+            self.tr(' pontos amostrados.') + '\n' +
+            self.tr('O limite máximo suportado pelo plugin para a layer de entrada é: ') +
+            str(self.maximum_points_plugin) + self.tr(' pontos.') + '\n' +
+            self.tr('Deseja realizar uma reamostragem de pontos?')
+        )
+        result = QMessageBox.question(self.dialog, self.tr('Mensagem'), msg,
+                                     QMessageBox.Yes | QMessageBox.No)
+        return result == QMessageBox.Yes
+
+    def _load_layer_to_dataframe(self, layer):
+        """Load QGIS layer to pandas dataframe."""
+        progress = self._create_progress_dialog('Importando tabela de atributos...', 10)
+
+        try:
+            # Export layer to CSV
+            csv_path = os.path.join(self.path_absolute, '0_Dados.csv')
+            crs = layer.crs()
+            QgsVectorFileWriter.writeAsVectorFormat(
+                layer, csv_path, "utf-8", crs, "CSV"
+            )
+            progress.setValue(9)
+
+            # Read CSV to dataframe
+            self.df = pd.read_csv(csv_path, sep=',')
+            self.df = self.df._get_numeric_data()  # Keep only numeric columns
+
+            # Add coordinates if not present
+            if self.Cord_X not in self.df.columns or self.Cord_Y not in self.df.columns:
+                self._extract_coordinates(layer, progress)
+
+            self.v_target = self.dialog.comboBox_VTarget.currentText()
+        finally:
+            progress.close()
+
+    def _extract_coordinates(self, layer, progress):
+        """Extract X, Y coordinates from layer geometries."""
+        progress = self._create_progress_dialog('Calculando Coordenadas da Layer...', len(layer))
+
+        coord_x = []
+        coord_y = []
+
+        for i, feat in enumerate(layer.getFeatures()):
+            geom = QgsGeometry.asPoint(feat.geometry())
+            pxy = QgsPointXY(geom)
+            coord_x.append(pxy.x())
+            coord_y.append(pxy.y())
+
+            progress.setValue(i + 1)
+            if progress.wasCanceled():
+                progress.close()
+                return
+
+        progress.close()
+
+        # Add to dataframe
+        coord_x_arr = np.array(coord_x)
+        coord_y_arr = np.array(coord_y)
+
+        df_coords = pd.DataFrame({
+            'CoordX_SM': coord_x_arr,
+            'CoordY_SM': coord_y_arr,
+            'ID_SM': np.arange(1, len(coord_x) + 1)
+        })
+
+        self.df = pd.concat([self.df, df_coords], axis=1)
+
+        # Save updated CSV
+        csv_path = os.path.join(self.path_absolute, '0_Dados.csv')
+        self.df.to_csv(csv_path, sep=',', index=False, encoding='utf-8')
+
+    def _clean_data(self):
+        """Remove NaN values and clean dataframe."""
+        # Sanitize target filename
+        self.VTarget_FileName = self.v_target
+        for ch in [' ', ')', '(', 'á', '?', '/', 'é', '.', 'í', 'ú', '-']:
+            if ch in self.VTarget_FileName:
+                self.VTarget_FileName = self.VTarget_FileName.replace(ch, "_")
+
+        # Remove rows with NaN in target column
+        is_nan = self.df.isnull()
+        row_has_nan = is_nan.any(axis=1)
+        df_with_nan = self.df[row_has_nan]
+
+        cols_with_nan = df_with_nan.columns[df_with_nan.isnull().any()].tolist()
+
+        if self.v_target in cols_with_nan:
+            rows_to_drop = self.df[self.df[self.v_target].isnull()].index.tolist()
+            self.df.drop(index=rows_to_drop, inplace=True)
+            self.df.reset_index(drop=True, inplace=True)
+
+            if rows_to_drop:
+                msg = (
+                    self.tr('Existem') + ': ' + str(len(rows_to_drop)) + ' ' +
+                    self.tr('valores nulos na tabela.') + '\n' +
+                    self.tr('Linha(s)') + ': ' + str(rows_to_drop) + ' ' +
+                    self.tr('foram excluídas.')
+                )
+                self._show_warning(self.tr('Mensagem'), msg)
+
+        # Resample if needed
+        if len(self.df) > self.maximum_points_plugin * 1.2:
+            self.df = self.resample_points(self.df)
+
+            result = QMessageBox.question(
+                self.dialog, self.tr('Mensagem'),
+                self.tr('Deseja salvar os pontos reamostrados em uma nova layer Qgis?'),
+                QMessageBox.Yes | QMessageBox.No
+            )
+
+            if result == QMessageBox.Yes:
+                self._export_resampled_layer()
+
+        # Detect outliers
+        if self.dialog.checkBox_Eliminate_Outilier.isChecked():
+            self.list_index_outlier = functions.localizar_outlier(self.df, self.v_target)
+
+    def _export_resampled_layer(self):
+        """Export resampled points to shapefile."""
+        try:
+            self.dialog.mMapLayerComboBox.currentIndexChanged.disconnect()
+        except TypeError:
+            pass
+
+        csv_path = os.path.join(self.path_absolute, '0_Dados_Resample.csv')
+        self.df.to_csv(csv_path, sep=',', index=False, encoding='utf-8')
+
+        layer_name = self.dialog.mMapLayerComboBox.currentLayer().name()
+        shp_path = os.path.join(self.path_absolute, layer_name + '_Resample.shp')
+
+        self.export_shapefile_resampled_to_qgis(csv_path, shp_path, layer_name + '_Resample')
+
+        try:
+            self.dialog.mMapLayerComboBox.currentIndexChanged.connect(
+                self.dialog.mMapLayerComboBox_changed
+            )
+        except (AttributeError, TypeError):
+            pass
+
+    def _calculate_grid_params(self):
+        """Calculate grid extent from data."""
+        # Extract data
+        self.data = self.df[[self.Cord_X, self.Cord_Y, self.v_target]].values.astype(float)
+
+        if len(self.list_index_outlier) > 0:
+            self.data_outlier = self.df.loc[self.list_index_outlier,
+                                           [self.Cord_X, self.Cord_Y, self.v_target]].values.astype(float)
+            self.df.drop(self.df.index[self.list_index_outlier], inplace=True)
+            self.df.reset_index(drop=True, inplace=True)
+
+        # Grid params
+        self.Pixel_Size_X = self.dialog.SpinBox_Pixel_Size_X.value()
+        self.Pixel_Size_Y = self.dialog.SpinBox_Pixel_Size_Y.value()
+
+        # Extent
+        if not self.Contorno_Definido:
+            self.Cord_X_min = self.df[self.Cord_X].min()
+            self.Cord_X_max = self.df[self.Cord_X].max()
+            self.Cord_Y_min = self.df[self.Cord_Y].min()
+            self.Cord_Y_max = self.df[self.Cord_Y].max()
+
+        self.dialog.lineEdit_XMin.setText('%.3f' % self.Cord_X_min)
+        self.dialog.lineEdit_XMax.setText('%.3f' % self.Cord_X_max)
+        self.dialog.lineEdit_YMin.setText('%.3f' % self.Cord_Y_min)
+        self.dialog.lineEdit_YMax.setText('%.3f' % self.Cord_Y_max)
+
+        self.Num_Points_X = int((self.Cord_X_max - self.Cord_X_min) / self.Pixel_Size_X)
+        self.Num_Points_Y = int((self.Cord_Y_max - self.Cord_Y_min) / self.Pixel_Size_Y)
+
+        self.dialog.lineEdit_Num_Points_X.setText(str(self.Num_Points_X))
+        self.dialog.lineEdit_Num_Points_Y.setText(str(self.Num_Points_Y))
+
+        self.dialog.label_VTargetOK.setText(self.tr('Z') + ': ' + self.v_target)
+        self.dialog.label_VTargetSVM.setText(self.tr('Z') + ': ' + self.v_target)
+        self.dialog.label_VTargetSVM.setEnabled(True)
+
+    def _calculate_morans_i(self):
+        """Calculate Moran's I spatial autocorrelation."""
+        df_sampled = pd.DataFrame(
+            self.data,
+            columns=[self.Cord_X, self.Cord_Y, self.v_target]
+        )
+
+        moran_index, p_value = functions.calculate_index_moran(
+            df_sampled, self.Cord_X, self.Cord_Y, self.v_target
+        )
+
+        self.moran_index = '%.3f' % moran_index
+        self.p_value = '%.3f' % p_value
+
+    def _plot_sampled_points(self):
+        """Plot sampled points with Moran's I."""
+        plt1.close()
+        plt1.figure(figsize=(10, 8))
+
+        title = f'I.Moran: {self.moran_index} P.Value: {self.p_value}'
+        plt1.title(title)
+        plt1.xlabel('Longitude (X)')
+        plt1.ylabel('Latitude (Y)')
+
+        plt1.xlim(self.Cord_X_min - 100, self.Cord_X_max + 100)
+        plt1.ylim(self.Cord_Y_min - 100, self.Cord_Y_max + 100)
+
+        # Set ticks
+        interval_x = max(1, int((self.Cord_X_max - self.Cord_X_min) / 5))
+        xmarks = [i for i in range(int(self.Cord_X_min), int(self.Cord_X_max), interval_x)]
+        plt1.xticks(xmarks)
+
+        interval_y = max(1, int((self.Cord_Y_max - self.Cord_Y_min) / 7))
+        ymarks = [i for i in range(int(self.Cord_Y_min), int(self.Cord_Y_max), interval_y)]
+        plt1.yticks(ymarks)
+
+        # Plot outliers
+        if len(self.list_index_outlier) > 0:
+            plt1.scatter(self.data_outlier[:, 0], self.data_outlier[:, 1],
+                        c=self.data_outlier[:, 2], marker="x", cmap='RdYlGn')
+
+        # Plot data
+        plt1.scatter(self.data[:, 0], self.data[:, 1], c=self.data[:, 2],
+                    cmap='RdYlGn', vmin=min(self.data[:, 2]), vmax=max(self.data[:, 2]))
+
+        clb = plt1.colorbar(aspect=20)
+        clb.ax.set_title(self.v_target)
+
+        plt1.subplots_adjust(wspace=0.6, hspace=0.6, left=0.15, right=0.95,
+                            bottom=0.1, top=0.95)
+
+        png_path = os.path.join(self.path_absolute, '0_Limite_Contorno.png')
+        plt1.savefig(png_path)
+
+        pixmap = QPixmap(png_path)
+        self.dialog.label_pontos_limite.setPixmap(pixmap)
+        self.dialog.label_pontos_limite.show()
+
+    def _initialize_variogram(self):
+        """Initialize variogram parameters."""
+        self.xy = self.df[[self.Cord_X, self.Cord_Y]]
+        self.z = self.df[self.v_target]
+
+        # Build semivariogram
+        semiv = semivariogram.Semivariogram(self.xy, self.z)
+
+        self.max_dist = semiv.max_dist
+        self.min_dist = semiv.min_dist
+
+        max_dist_factor = 0.6
+        self.active_distance_ini = max_dist_factor * self.max_dist
+        self.lag_distance_ini = semiv.var['lag'][len(self.z)]
+
+        if self.lag_distance_ini < self.min_dist:
+            self.lag_distance_ini = self.min_dist
+
+        # Set DMax minimum
+        i = 5
+        while self.max_dist < self.min_dist * i:
+            i -= 1
+
+        self.dialog.lineEdit_OK_DMax.setText('%.3f' % self.active_distance_ini)
+        self.dialog.lineEdit_OK_lags_dist.setText('%.3f' % self.lag_distance_ini)
+
+    # Data loading into tables
     def load_attribute_table(self):
         """Load layer attributes into datatable."""
-        pass
+        if self.df is None:
+            return
+
+        df_display = self.df[['ID_SM', self.Cord_X, self.Cord_Y, self.v_target]]
+
+        progress = self._create_progress_dialog(
+            'Importando tabela de atributos...',
+            len(df_display.index) * len(df_display.columns)
+        )
+
+        try:
+            self.dialog.datatable_atributos.setColumnCount(len(df_display.columns))
+            self.dialog.datatable_atributos.setRowCount(len(df_display.index))
+
+            headers = ['ID', 'Coord X', 'Coord Y', self.v_target]
+            self.dialog.datatable_atributos.setHorizontalHeaderLabels(headers)
+
+            cont = 1
+            for i in range(len(df_display.index)):
+                for j in range(len(df_display.columns)):
+                    value = df_display.iloc[i, j]
+
+                    if j == 0:
+                        text = '%.0f' % value
+                    else:
+                        text = '%.3f' % value if isinstance(value, (int, float)) else str(value)
+
+                    item = QTableWidgetItem(text)
+
+                    if i in self.list_index_outlier:
+                        item.setForeground(QBrush(QColor(255, 0, 0)))
+
+                    self.dialog.datatable_atributos.setItem(i, j, item)
+                    cont += 1
+                    progress.setValue(cont)
+
+                    if progress.wasCanceled():
+                        progress.close()
+                        return
+
+            self.dialog.datatable_atributos.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)
+        finally:
+            progress.close()
 
     def load_svm_train_features(self):
         """Load SVM training features."""
+        # Implemented when SVM controller is created
         pass
 
     def load_svm_train_labels(self):
         """Load SVM training labels."""
+        # Implemented when SVM controller is created
         pass
 
-    def resample_points(self, dataframe):
-        """Resample point data."""
-        pass
+    def resample_points(self, df):
+        """Resample point data using grid-based IDW."""
+        if 'fid' in df.columns:
+            df.drop('fid', axis=1, inplace=True)
+
+        # Remove columns with all NaN
+        cols_nan = df.columns[df.isnull().any()].tolist()
+        for col in cols_nan:
+            if df[col].isnull().sum() == len(df):
+                df.drop(col, axis=1, inplace=True)
+
+        # Remove rows with any NaN
+        if df.isnull().sum().sum() > 0:
+            df.dropna(inplace=True)
+            df.reset_index(drop=True, inplace=True)
+
+        # Calculate grid
+        if not self.Contorno_Definido:
+            x_min = df[self.Cord_X].min()
+            x_max = df[self.Cord_X].max()
+            y_min = df[self.Cord_Y].min()
+            y_max = df[self.Cord_Y].max()
+        else:
+            x_min = self.df_limite['Coord_X'].min()
+            x_max = self.df_limite['Coord_X'].max()
+            y_min = self.df_limite['Coord_Y'].min()
+            y_max = self.df_limite['Coord_Y'].max()
+
+        area = (x_max - x_min) * (y_max - y_min)
+        n = area / self.maximum_points_plugin
+        grid_size = np.sqrt(n)
+
+        grid_x = np.arange(x_min, x_max, grid_size)
+        grid_y = np.arange(y_min, y_max, grid_size)
+
+        # Create grid points
+        grid_points = []
+        for x in grid_x:
+            for y in grid_y:
+                grid_points.append([x, y])
+
+        grid_points = np.array(grid_points)
+
+        # Apply contour if defined
+        if self.dialog.checkBox_Area_Contorno.isChecked():
+            if self.df_limite is not None and len(self.df_limite) > 0:
+                poly = np.array(self.df_limite, dtype=float)
+                bbox_path = mplPath.Path(poly)
+
+                filtered = []
+                for pt in grid_points:
+                    if bbox_path.contains_point((pt[0], pt[1])):
+                        filtered.append(pt)
+                grid_points = np.array(filtered)
+
+        return df
 
     # File management
     def on_file_save_clicked(self):
         """Save data to file."""
-        pass
+        if self.df is None:
+            self._show_warning(self.tr('Aviso'), self.tr('Nenhum dado carregado.'))
+            return
+
+        filepath, _ = QFileDialog.getSaveFileName(
+            self.dialog, self.tr('Salvar dados'), self.path_absolute,
+            self.tr('CSV files (*.csv)')
+        )
+
+        if filepath:
+            self.df.to_csv(filepath, sep=',', index=False, encoding='utf-8')
 
     # Export to QGIS
-    def export_raster_to_qgis(self, table, output_path, layer_name, z_field):
-        """Export interpolated raster to QGIS."""
+    def export_raster_to_qgis(self, input_table, output_tiff, output_name, z_field):
+        """Export interpolated raster to QGIS via gdal_grid."""
+        # Core gdal_grid implementation
+        # Will be extracted from Smart_Map.py lines 8314-8556
         pass
 
     def define_raster_color_ramp(self, layer, layer_name):
         """Define raster color ramp."""
+        # Will be extracted from Smart_Map.py lines 8641-8712
         pass
 
     def export_shapefile_to_qgis(self, input_path, alg_name):
         """Export shapefile to QGIS."""
+        # Will be extracted from Smart_Map.py lines 8712-8760
         pass
 
-    def export_shapefile_resampled_to_qgis(self, table, output_path, layer_name):
+    def export_shapefile_resampled_to_qgis(self, input_table, output_shp, output_name):
         """Export resampled shapefile to QGIS."""
+        # Will be extracted from Smart_Map.py lines 8760+
         pass
+
+    # Helpers
+    def _create_progress_dialog(self, label, max_val):
+        """Create QProgressDialog."""
+        progress = QProgressDialog(label, self.tr('Cancelar'), 1, max_val, self.dialog)
+        progress.setWindowTitle('Smart-Map')
+        progress.show()
+        progress.setCancelButton(None)
+        progress.setWindowModality(QtCore.Qt.WindowModal)
+        time.sleep(0.1)
+        return progress
+
+    def _show_warning(self, title, message):
+        """Show warning message box."""
+        msg_box = QMessageBox()
+        msg_box.setWindowIcon(QIcon(self.icon_path))
+        msg_box.setIcon(QMessageBox.Warning)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message)
+        msg_box.exec_()
