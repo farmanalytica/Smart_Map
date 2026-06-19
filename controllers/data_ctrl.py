@@ -8,11 +8,12 @@ import pandas as pd
 import matplotlib.path as mplPath
 import matplotlib.pyplot as plt1
 import subprocess
+from scipy import spatial
 
 from qgis.PyQt import QtCore, QtWidgets, QtGui
 from qgis.PyQt.QtWidgets import QMessageBox, QFileDialog, QProgressDialog, QTableWidgetItem
 from qgis.PyQt.QtGui import QIcon, QPixmap, QColor, QBrush
-from qgis.core import QgsVectorFileWriter, QgsPointXY, QgsGeometry
+from qgis.core import QgsVectorFileWriter, QgsPointXY, QgsGeometry, QgsProject
 
 from ..managers.data_manager import DataManager
 from ..utils import functions
@@ -32,6 +33,12 @@ class DataController:
         self.tr = tr_func
 
         self.data_manager = DataManager()
+
+        # Back-reference to the grid controller, set by Smart_Map._initialize_controllers
+        # after both controllers are constructed. grid_ctrl is the single owner of the
+        # boundary state (df_limite + Contorno_Definido); data_ctrl reads it through the
+        # properties below. May be None until wiring completes.
+        self.grid_ctrl = None
 
         # Data state
         self.df = None
@@ -56,9 +63,10 @@ class DataController:
         self.Num_Points_X = None
         self.Num_Points_Y = None
 
-        # Boundary
-        self.Contorno_Definido = False
-        self.df_limite = None
+        # Boundary state is OWNED by grid_ctrl. The Contorno_Definido / df_limite
+        # properties below delegate to grid_ctrl so there is a single source of truth.
+        # (Fixes the old bug where resample_points read self.df_limite, which was always
+        # None on data_ctrl while the real boundary lived on grid_ctrl.)
 
         # Variogram
         self.max_dist = None
@@ -69,12 +77,81 @@ class DataController:
         # Parameters
         self.maximum_points_plugin = 5000
         self.VTarget_FileName = None
+        self.cols_table_atribute = []
+
+        # Workflow state flags
+        self.ImportQGIS = False    # attribute table loaded from a QGIS layer
+        self.Var_Selected = False  # target variable selected for interpolation
+        self.Variogram = False     # semivariogram generated
+
+    # Boundary state delegation (grid_ctrl is the single owner) ---------------
+    @property
+    def Contorno_Definido(self):
+        """Whether a boundary contour has been defined (owned by grid_ctrl)."""
+        if self.grid_ctrl is None:
+            return False
+        return self.grid_ctrl.Contorno_Definido
+
+    @Contorno_Definido.setter
+    def Contorno_Definido(self, value):
+        if self.grid_ctrl is not None:
+            self.grid_ctrl.Contorno_Definido = value
+
+    @property
+    def df_limite(self):
+        """Boundary polygon dataframe (owned by grid_ctrl)."""
+        if self.grid_ctrl is None:
+            return None
+        return self.grid_ctrl.df_limite
+
+    @df_limite.setter
+    def df_limite(self, value):
+        if self.grid_ctrl is not None:
+            self.grid_ctrl.df_limite = value
 
     # Layer selection & filtering
     def on_layer_combo_changed(self, index):
-        """Handle attribute table layer selection."""
-        # Layer proxy filtering done in Smart_Map.py UI setup
-        pass
+        """Handle attribute table layer selection (ported from mMapLayerComboBox_changed).
+
+        Resolves the layer CRS (SAD69 -> project CRS, otherwise layer CRS), shows it in
+        label_CRS_Layer, populates comboBox_VTarget with the layer field names, clears the
+        attribute datatable and enables the VTarget combo + ImportQGIS button.
+        """
+        if self.dialog.mMapLayerComboBox.currentIndex() < 0:
+            return
+
+        selected_layer = self.dialog.mMapLayerComboBox.currentLayer()
+        if selected_layer is None:
+            return
+
+        coordenate_reference = selected_layer.crs().description()
+
+        if 'SAD69' in coordenate_reference:
+            lyr_crs = QgsProject.instance().crs().authid()   # use project CRS, e.g. EPSG:32723
+        else:
+            lyr_crs = selected_layer.crs().authid()          # e.g. EPSG:32723
+
+        # Boundary CRS state is owned by grid_ctrl.
+        if self.grid_ctrl is not None:
+            self.grid_ctrl.lyrCRS_table_atribute = lyr_crs
+
+        self.dialog.label_CRS_Layer.show()
+        self.dialog.label_CRS_Layer.setText('CRS Layer: ' + lyr_crs)
+
+        # Field names of the selected layer (used for the target combo and SVM features).
+        self.cols_table_atribute = selected_layer.fields().names()
+
+        self.dialog.comboBox_VTarget.setEnabled(True)
+        self.dialog.comboBox_VTarget.clear()
+        self.dialog.comboBox_VTarget.addItems(self.cols_table_atribute)
+        self.dialog.comboBox_VTarget.setCurrentIndex(0)
+
+        # Reset the attribute table; user must (re)import.
+        self.dialog.datatable_atributos.setColumnCount(0)
+        self.dialog.datatable_atributos.setRowCount(0)
+
+        self.dialog.comboBox_VTarget.setEnabled(True)
+        self.dialog.pushButton_ImportQGIS.setEnabled(True)
 
     def on_vector_points_toggled(self, checked):
         """Filter vector point layers."""
@@ -124,6 +201,14 @@ class DataController:
 
         # Initialize variogram
         self._initialize_variogram()
+
+        # Enable the UI groups/widgets this domain owns and set workflow flags.
+        self._enable_ui_after_import()
+
+        # If the area-contour option is active, (re)apply the boundary now so the data is
+        # clipped and the boundary is plotted. Boundary logic is owned by grid_ctrl.
+        if self.dialog.checkBox_Area_Contorno.isChecked() and self.grid_ctrl is not None:
+            self.grid_ctrl.on_contour_apply_clicked()
 
     def _validate_layer_crs(self, layer):
         """Check if layer is in projected coordinates (not geographic)."""
@@ -403,6 +488,52 @@ class DataController:
         self.dialog.lineEdit_OK_DMax.setText('%.3f' % self.active_distance_ini)
         self.dialog.lineEdit_OK_lags_dist.setText('%.3f' % self.lag_distance_ini)
 
+    def _enable_ui_after_import(self):
+        """Enable the UI groups/widgets owned by the data+grid domain and set flags.
+
+        Ported from the tail of pushButton_ImportQGIS_clicked. Only enables widgets in the
+        Dados / Parametros-e-Contorno tabs and the variogram-enable toggles needed to start
+        interpolation. Cross-domain population is intentionally NOT done here.
+        """
+        # --- Aba Parametros e Contorno -------------------------------------
+        self.dialog.groupBox_Area_Contorno.setEnabled(True)
+        self.dialog.datatable_limite.setEnabled(True)
+        self.dialog.groupBox_Interv_Interp.setEnabled(True)
+        self.dialog.SpinBox_Pixel_Size_X.setEnabled(True)
+        self.dialog.SpinBox_Pixel_Size_Y.setEnabled(True)
+        self.dialog.lineEdit_XMin.setEnabled(True)
+        self.dialog.lineEdit_XMax.setEnabled(True)
+        self.dialog.lineEdit_YMin.setEnabled(True)
+        self.dialog.lineEdit_YMax.setEnabled(True)
+
+        # --- Aba Interpolacao -> Krigagem (variogram-enable toggles) -------
+        self.dialog.groupBox_Variograma.setEnabled(True)
+        self.dialog.pushButton_VariogramaReset.setEnabled(False)
+        self.dialog.pushButton_VariogramaAjust.setEnabled(True)
+        self.dialog.pushButton_VariogramaSave.setEnabled(False)
+        self.dialog.lineEdit_OK_DMax.setEnabled(True)
+        self.dialog.lineEdit_OK_lags_dist.setEnabled(True)
+
+        # Workflow flags owned by this domain.
+        self.ImportQGIS = True       # attribute table loaded from a QGIS layer
+        self.Var_Selected = True     # target variable selected for interpolation
+        self.Variogram = False       # table loaded, semivariogram not yet generated
+
+        # SVM_Add_Coord lives on grid_ctrl (SVM/grid state owner); reset it on import.
+        if self.grid_ctrl is not None:
+            self.grid_ctrl.SVM_Add_Coord = False
+
+        # TODO(variogram/kriging domain): set the OK neighbours/radius limits and
+        #   defaults that the old pushButton_ImportQGIS_clicked set here, e.g.
+        #   VB_OK_Minimum/Maximum, lineEdit_OK_VBNumMax, Raio_OK_Minimum/Maximum,
+        #   lineEdit_OK_VBRaio. Owned by the variogram/kriging controllers.
+        # TODO(svm domain): enable and populate the SVM tab widgets the old method set
+        #   here (groupBox_SVM*, comboBox_SVM_Features/_Adds, lineEdit_SVM_VB*,
+        #   df_SVM_Trainfeatures/Trainlabels, load_datatable_SVM_*). Owned by SVMController.
+        # TODO(zones domain): enable pushButton_ZM_Add_Var. Owned by ZonesController.
+        # TODO(variogram/zones domains): call load_semivariograms() and
+        #   load_maps_to_generate_ZM() after import. Owned by those controllers.
+
     # Data loading into tables
     def load_attribute_table(self):
         """Load layer attributes into datatable."""
@@ -461,27 +592,39 @@ class DataController:
         pass
 
     def resample_points(self, df):
-        """Resample point data using grid-based IDW."""
+        """Resample point data using grid-based IDW (ported from resampling_of_points).
+
+        Builds a regular grid over the data (or boundary) extent, and for every grid node
+        averages the observations of the sample points found within a search radius
+        (grid_size / 2) via a cKDTree, using functions.mean with the IDW weight read from
+        doubleSpinBox_Weight_IDW. Nodes with no neighbour get -1 -> NaN and are dropped.
+        Returns the rebuilt, resampled dataframe (df_resample).
+        """
         if 'fid' in df.columns:
             df.drop('fid', axis=1, inplace=True)
 
-        # Remove columns with all NaN
-        cols_nan = df.columns[df.isnull().any()].tolist()
-        for col in cols_nan:
-            if df[col].isnull().sum() == len(df):
-                df.drop(col, axis=1, inplace=True)
+        # Remove columns that are entirely NaN (avoid wiping the whole dataframe later).
+        list_cols_nan = df.columns[df.isnull().any()].tolist()
+        for column_name in list_cols_nan:
+            if df[column_name].isnull().sum() == len(df):
+                df.drop(column_name, axis=1, inplace=True)
 
-        # Remove rows with any NaN
+        # Remove rows with any remaining NaN.
         if df.isnull().sum().sum() > 0:
             df.dropna(inplace=True)
             df.reset_index(drop=True, inplace=True)
 
-        # Calculate grid
+        Cord_X = self.Cord_X
+        Cord_Y = self.Cord_Y
+        weight_IDW = self.dialog.doubleSpinBox_Weight_IDW.value()
+        cols = df.columns
+
+        # Grid extent: data extent when no boundary, else the boundary extent.
         if not self.Contorno_Definido:
-            x_min = df[self.Cord_X].min()
-            x_max = df[self.Cord_X].max()
-            y_min = df[self.Cord_Y].min()
-            y_max = df[self.Cord_Y].max()
+            x_min = df[Cord_X].min()
+            x_max = df[Cord_X].max()
+            y_min = df[Cord_Y].min()
+            y_max = df[Cord_Y].max()
         else:
             x_min = self.df_limite['Coord_X'].min()
             x_max = self.df_limite['Coord_X'].max()
@@ -492,30 +635,93 @@ class DataController:
         n = area / self.maximum_points_plugin
         grid_size = np.sqrt(n)
 
-        grid_x = np.arange(x_min, x_max, grid_size)
-        grid_y = np.arange(y_min, y_max, grid_size)
+        gridx = np.arange(x_min, x_max, grid_size)
+        gridy = np.arange(y_min, y_max, grid_size)
 
-        # Create grid points
-        grid_points = []
-        for x in grid_x:
-            for y in grid_y:
-                grid_points.append([x, y])
+        lista_xy = []
+        for i in range(len(gridx)):
+            for j in range(len(gridy)):
+                lista_xy.append([gridx[i], gridy[j]])
 
-        grid_points = np.array(grid_points)
+        arr_xy = np.array(lista_xy)
 
-        # Apply contour if defined
+        # Clip grid to the boundary polygon when the contour option is active.
         if self.dialog.checkBox_Area_Contorno.isChecked():
             if self.df_limite is not None and len(self.df_limite) > 0:
-                poly = np.array(self.df_limite, dtype=float)
-                bbox_path = mplPath.Path(poly)
+                lista_cut_xy = []
+                polygono = np.array(self.df_limite, dtype=float)
+                bbPath = mplPath.Path(polygono)
+                for i in range(len(arr_xy)):
+                    ponto = (arr_xy[i, 0], arr_xy[i, 1])
+                    if bbPath.contains_point(ponto):
+                        lista_cut_xy.append([arr_xy[i, 0], arr_xy[i, 1]])
+                arr_xy = np.array(lista_cut_xy)
 
-                filtered = []
-                for pt in grid_points:
-                    if bbox_path.contains_point((pt[0], pt[1])):
-                        filtered.append(pt)
-                grid_points = np.array(filtered)
+        grid_xy = np.array(arr_xy)
 
-        return df
+        # Dense (observed) sample coordinates and the KDTree over them.
+        features_dense = df[[Cord_X, Cord_Y]]
+        features_dense = np.array(features_dense, dtype=float)
+        gridxy_dense = np.c_[features_dense[:, 0], features_dense[:, 1]]
+        tree_dense = spatial.cKDTree(gridxy_dense)
+
+        maximum = (len(cols) - 3)   # discard CoordX_SM, CoordY_SM, ID_SM
+        progress = self._create_progress_dialog(
+            self.tr('Reamostragem da tabela de atributos...'), maximum
+        )
+
+        arr_resample = None
+        try:
+            for feat in range(len(cols) - 3):
+                vt_dense = df.iloc[:, feat]                    # observed values of the covariate
+
+                lista = []
+                for cont in range(len(grid_xy)):
+                    p = np.array([grid_xy[cont, 0], grid_xy[cont, 1]])
+
+                    raio_busca = float(grid_size / 2)          # search radius = 50% of grid length
+                    neigs = tree_dense.query_ball_point(p, raio_busca)
+
+                    if len(neigs) > 0:
+                        distances, points_idx = tree_dense.query(p, k=len(neigs))
+                        vt_vals_dense = vt_dense[points_idx]
+                        value = functions.mean(distances, vt_vals_dense, weight_IDW)
+                    else:
+                        value = -1
+
+                    lista.append(value)
+
+                arr = np.array(lista)
+
+                if feat == 0:
+                    arr_resample = np.copy(arr)
+                else:
+                    arr_resample = np.column_stack((arr_resample, arr))
+
+                progress.setValue(feat)
+                if progress.wasCanceled():
+                    progress.close()
+                    return df
+        finally:
+            progress.close()
+
+        arr_resample = np.column_stack((arr_resample, arr_xy))
+
+        id_sm = np.arange(1, len(arr_xy) + 1, 1)
+        arr_resample = np.column_stack((arr_resample, id_sm))
+
+        df_resample = pd.DataFrame(np.atleast_2d(arr_resample), columns=cols)
+
+        df_resample.replace({-1: np.nan}, inplace=True)        # nodes with no neighbour -> NaN
+
+        if df_resample.isnull().sum().sum() > 0:
+            df_resample.dropna(inplace=True)
+            df_resample.reset_index(drop=True, inplace=True)
+
+        df_resample['ID_SM'] = df_resample.index
+        df_resample['ID_SM'] += 1
+
+        return df_resample
 
     # File management
     def on_file_save_clicked(self):

@@ -428,6 +428,9 @@ class smart_map:
         self.grid_ctrl = GridController(
             data_view, self.data_ctrl, self.icon_path, self.path_absolute, self.tr
         )
+        # Boundary state is owned by grid_ctrl; give data_ctrl a back-reference so it
+        # can read df_limite / Contorno_Definido from the single owner (grid_ctrl).
+        self.data_ctrl.grid_ctrl = self.grid_ctrl
 
         # Variogram controller
         self.variogram_ctrl = VariogramController(

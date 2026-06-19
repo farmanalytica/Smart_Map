@@ -28,7 +28,9 @@ class GridController:
         # Pixel_Size_X, Pixel_Size_Y
         # Num_Points_X, Num_Points_Y
 
-        # Boundary state
+        # Boundary state (grid_ctrl is the SINGLE OWNER; data_ctrl reads these via
+        # delegating properties).
+        self.Contorno_Definido = False
         self.df_limite = pd.DataFrame(columns=['Coord_X', 'Coord_Y'])
         self.data_limite = None
         self.list_index_out_polygon = []
@@ -160,7 +162,7 @@ class GridController:
             # Reset boundary if it was defined
             if len(self.df_limite) > 0:
                 self.df_limite = pd.DataFrame(columns=['Coord_X', 'Coord_Y'])
-                self.data_ctrl.Contorno_Definido = False
+                self.Contorno_Definido = False
 
                 # Restore extent from data
                 if self.data_ctrl.df is not None:
@@ -185,6 +187,11 @@ class GridController:
 
                     self.dialog.lineEdit_Num_Points_X.setText(str(self.data_ctrl.Num_Points_X))
                     self.dialog.lineEdit_Num_Points_Y.setText(str(self.data_ctrl.Num_Points_Y))
+
+                    # Re-plot the sampled points without the boundary polygon
+                    # (mirrors the re-plot in the old checkBox_Area_Contorno_clicked).
+                    if self.data_ctrl.data is not None:
+                        self.data_ctrl._plot_sampled_points()
 
     def on_contour_layer_combo_changed(self, index):
         """Populate coordinate field combos based on layer type."""
@@ -381,7 +388,17 @@ class GridController:
                 self.data_ctrl.z.drop(self.data_ctrl.z.index[self.list_index_out_polygon], inplace=True)
                 self.data_ctrl.z.reset_index(drop=True, inplace=True)
 
-        self.data_ctrl.Contorno_Definido = True
+            # TODO(svm domain): the old pushButton_Area_Contorno_clicked also filtered
+            #   df_SVM_Trainfeatures / df_SVM_Trainlabels by list_index_out_polygon and
+            #   reloaded their datatables. Owned by SVMController.
+
+        # Rebuild the (x, y, z) array from the now-filtered dataframe so the boundary plot
+        # reflects only the in-polygon points (mirrors the old re-assignment of self.data).
+        self.data_ctrl.data = self.data_ctrl.df[
+            [self.data_ctrl.Cord_X, self.data_ctrl.Cord_Y, self.data_ctrl.v_target]
+        ].values.astype(float)
+
+        self.Contorno_Definido = True
 
     def _display_boundary_table(self):
         """Show boundary polygon in datatable."""
