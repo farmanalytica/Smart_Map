@@ -119,6 +119,26 @@ class DataView(QWidget):
         self.checkBox_Eliminate_Outilier = QCheckBox(self.tr('Eliminar Outliers'))
         layout.addWidget(self.checkBox_Eliminate_Outilier)
 
+        # IDW weight (used when resampling dense layers to the grid)
+        idw_layout = QHBoxLayout()
+        idw_layout.addWidget(QLabel(self.tr('Peso IDW:')))
+        self.doubleSpinBox_Weight_IDW = QDoubleSpinBox()
+        self.doubleSpinBox_Weight_IDW.setMinimum(0.0)
+        self.doubleSpinBox_Weight_IDW.setMaximum(10.0)
+        self.doubleSpinBox_Weight_IDW.setSingleStep(0.5)
+        self.doubleSpinBox_Weight_IDW.setValue(2.0)
+        idw_layout.addWidget(self.doubleSpinBox_Weight_IDW)
+        idw_layout.addStretch()
+        layout.addLayout(idw_layout)
+
+        # Output directory (working folder for generated files)
+        out_layout = QHBoxLayout()
+        out_layout.addWidget(QLabel(self.tr('Pasta de Saída:')))
+        self.lineEdit = QtWidgets.QLineEdit()
+        self.lineEdit.setReadOnly(True)
+        out_layout.addWidget(self.lineEdit)
+        layout.addLayout(out_layout)
+
         # CRS info
         self.label_CRS_Layer = QLabel(self.tr('CRS: '))
         layout.addWidget(self.label_CRS_Layer)

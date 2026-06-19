@@ -57,6 +57,26 @@ class SmartMapDialog(QDialog):
         title_layout.addWidget(title_label)
         title_layout.addStretch()
 
+        # Language flags + about (icons/handlers wired by the UI controller).
+        self.label_language_PT = QLabel()
+        self.label_language_PT.setFixedSize(28, 20)
+        self.label_language_PT.setScaledContents(True)
+        self.label_language_PT.setToolTip('Português')
+        self.label_language_PT.setCursor(QtCore.Qt.PointingHandCursor)
+        title_layout.addWidget(self.label_language_PT)
+
+        self.label_language_USA = QLabel()
+        self.label_language_USA.setFixedSize(28, 20)
+        self.label_language_USA.setScaledContents(True)
+        self.label_language_USA.setToolTip('English')
+        self.label_language_USA.setCursor(QtCore.Qt.PointingHandCursor)
+        title_layout.addWidget(self.label_language_USA)
+
+        self.label_About = QLabel('ℹ')
+        self.label_About.setToolTip(self.tr('Sobre'))
+        self.label_About.setCursor(QtCore.Qt.PointingHandCursor)
+        title_layout.addWidget(self.label_About)
+
         layout.addLayout(title_layout)
 
         # Tabs

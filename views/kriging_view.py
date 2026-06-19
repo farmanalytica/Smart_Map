@@ -16,6 +16,10 @@ class KrigingView(QWidget):
         """Build kriging view UI."""
         layout = QVBoxLayout()
 
+        # Target variable label
+        self.label_VTargetOK = QLabel(self.tr('Z: '))
+        layout.addWidget(self.label_VTargetOK)
+
         # Parameters
         self.groupBox_Krigagem = QGroupBox(self.tr('Parâmetros de Busca'))
         params_group = self.groupBox_Krigagem

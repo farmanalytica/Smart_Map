@@ -38,11 +38,15 @@ class DataController:
         # The export_* methods below are thin delegators to this manager.
         self.export_manager = ExportManager(iface, path_absolute)
 
-        # Back-reference to the grid controller, set by Smart_Map._initialize_controllers
-        # after both controllers are constructed. grid_ctrl is the single owner of the
-        # boundary state (df_limite + Contorno_Definido); data_ctrl reads it through the
-        # properties below. May be None until wiring completes.
+        # Back-references wired by Smart_Map._initialize_controllers after all
+        # controllers/views are built. grid_ctrl owns boundary state (see properties
+        # below). The target labels, variogram-enable toggles and the OK DMax/lag
+        # fields live on OTHER tabs; route writes to their owning views/controller.
         self.grid_ctrl = None
+        self.variogram_ctrl = None
+        self.variogram_view = None
+        self.kriging_view = None
+        self.svm_view = None
 
         # Data state
         self.df = None
@@ -364,13 +368,6 @@ class DataController:
 
         self.export_shapefile_resampled_to_qgis(csv_path, shp_path, layer_name + '_Resample')
 
-        try:
-            self.dialog.mMapLayerComboBox.currentIndexChanged.connect(
-                self.dialog.mMapLayerComboBox_changed
-            )
-        except (AttributeError, TypeError):
-            pass
-
     def _calculate_grid_params(self):
         """Calculate grid extent from data."""
         # Extract data
@@ -404,9 +401,12 @@ class DataController:
         self.dialog.lineEdit_Num_Points_X.setText(str(self.Num_Points_X))
         self.dialog.lineEdit_Num_Points_Y.setText(str(self.Num_Points_Y))
 
-        self.dialog.label_VTargetOK.setText(self.tr('Z') + ': ' + self.v_target)
-        self.dialog.label_VTargetSVM.setText(self.tr('Z') + ': ' + self.v_target)
-        self.dialog.label_VTargetSVM.setEnabled(True)
+        # Target labels live on the kriging / SVM tabs.
+        if self.kriging_view is not None:
+            self.kriging_view.label_VTargetOK.setText(self.tr('Z') + ': ' + self.v_target)
+        if self.svm_view is not None:
+            self.svm_view.label_VTargetSVM.setText(self.tr('Z') + ': ' + self.v_target)
+            self.svm_view.label_VTargetSVM.setEnabled(True)
 
     def _calculate_morans_i(self):
         """Calculate Moran's I spatial autocorrelation."""
@@ -489,8 +489,10 @@ class DataController:
         while self.max_dist < self.min_dist * i:
             i -= 1
 
-        self.dialog.lineEdit_OK_DMax.setText('%.3f' % self.active_distance_ini)
-        self.dialog.lineEdit_OK_lags_dist.setText('%.3f' % self.lag_distance_ini)
+        # DMax / lag-distance fields live on the variogram tab.
+        if self.variogram_view is not None:
+            self.variogram_view.lineEdit_OK_DMax.setText('%.3f' % self.active_distance_ini)
+            self.variogram_view.lineEdit_OK_lags_dist.setText('%.3f' % self.lag_distance_ini)
 
     def _enable_ui_after_import(self):
         """Enable the UI groups/widgets owned by the data+grid domain and set flags.
@@ -500,32 +502,55 @@ class DataController:
         interpolation. Cross-domain population is intentionally NOT done here.
         """
         # --- Aba Parametros e Contorno -------------------------------------
-        self.dialog.groupBox_Area_Contorno.setEnabled(True)
-        self.dialog.datatable_limite.setEnabled(True)
-        self.dialog.groupBox_Interv_Interp.setEnabled(True)
-        self.dialog.SpinBox_Pixel_Size_X.setEnabled(True)
-        self.dialog.SpinBox_Pixel_Size_Y.setEnabled(True)
-        self.dialog.lineEdit_XMin.setEnabled(True)
-        self.dialog.lineEdit_XMax.setEnabled(True)
-        self.dialog.lineEdit_YMin.setEnabled(True)
-        self.dialog.lineEdit_YMax.setEnabled(True)
+        # Some containers are plain tabs in the new pure-PyQt views (not named
+        # QGroupBoxes); enable defensively so a missing attr never crashes import.
+        self._enable_if_present(self.dialog, [
+            'groupBox_Area_Contorno', 'datatable_limite', 'groupBox_Interv_Interp',
+            'SpinBox_Pixel_Size_X', 'SpinBox_Pixel_Size_Y',
+            'lineEdit_XMin', 'lineEdit_XMax', 'lineEdit_YMin', 'lineEdit_YMax',
+        ])
 
         # --- Aba Interpolacao -> Krigagem (variogram-enable toggles) -------
-        self.dialog.groupBox_Variograma.setEnabled(True)
-        self.dialog.pushButton_VariogramaReset.setEnabled(False)
-        self.dialog.pushButton_VariogramaAjust.setEnabled(True)
-        self.dialog.pushButton_VariogramaSave.setEnabled(False)
-        self.dialog.lineEdit_OK_DMax.setEnabled(True)
-        self.dialog.lineEdit_OK_lags_dist.setEnabled(True)
+        if self.variogram_view is not None:
+            self._enable_if_present(self.variogram_view, [
+                'groupBox_Variograma', 'lineEdit_OK_DMax', 'lineEdit_OK_lags_dist',
+            ])
+            self._set_enabled_if_present(self.variogram_view, {
+                'pushButton_VariogramaReset': False,
+                'pushButton_VariogramaAjust': True,
+                'pushButton_VariogramaSave': False,
+            })
 
         # Workflow flags owned by this domain.
         self.ImportQGIS = True       # attribute table loaded from a QGIS layer
         self.Var_Selected = True     # target variable selected for interpolation
         self.Variogram = False       # table loaded, semivariogram not yet generated
 
+        # Sync the variogram controller's gate flags (on_variogram_adjust_clicked
+        # early-returns unless Var_Selected is True).
+        if self.variogram_ctrl is not None:
+            self.variogram_ctrl.Var_Selected = True
+            self.variogram_ctrl.Variogram = False
+
         # SVM_Add_Coord lives on grid_ctrl (SVM/grid state owner); reset it on import.
         if self.grid_ctrl is not None:
             self.grid_ctrl.SVM_Add_Coord = False
+
+    @staticmethod
+    def _enable_if_present(obj, names):
+        """setEnabled(True) on each named widget that exists on obj."""
+        for name in names:
+            w = getattr(obj, name, None)
+            if w is not None:
+                w.setEnabled(True)
+
+    @staticmethod
+    def _set_enabled_if_present(obj, name_state):
+        """setEnabled(state) on each named widget that exists on obj."""
+        for name, state in name_state.items():
+            w = getattr(obj, name, None)
+            if w is not None:
+                w.setEnabled(state)
 
         # TODO(variogram/kriging domain): set the OK neighbours/radius limits and
         #   defaults that the old pushButton_ImportQGIS_clicked set here, e.g.
