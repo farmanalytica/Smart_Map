@@ -43,6 +43,8 @@ class DataView(QWidget):
 
         # Data management tabs
         data_tabs = QTabWidget()
+        data_tabs.setElideMode(Qt.ElideNone)
+        data_tabs.setUsesScrollButtons(True)
 
         # Attribute table tab
         attr_tab = self._create_attribute_table_tab()

@@ -87,6 +87,10 @@ class SmartMapDialog(QDialog):
         # result tables + plot panels) never gets squished / clipped on smaller
         # windows — it scrolls instead.
         self.tabs = QTabWidget()
+        # Show full tab labels instead of eliding them to "..." when the bar is
+        # narrow; fall back to scroll buttons if they still don't all fit.
+        self.tabs.setElideMode(QtCore.Qt.ElideNone)
+        self.tabs.setUsesScrollButtons(True)
 
         self.data_view = DataView(self.iface, self.plugin_dir, self.icon_path, self.tr)
         self.tabs.addTab(self._scrollable(self.data_view), self.tr('Data'))

@@ -75,6 +75,8 @@ class KrigingView(QWidget):
         # Results tabs. Index order matches the legacy tabWidget_Interpolacao_OK:
         #   0 = variogram / kriging map, 1 = cross-validation, 2 = interpolated points.
         self.tabWidget_Interpolacao_OK = QtWidgets.QTabWidget()
+        self.tabWidget_Interpolacao_OK.setElideMode(QtCore.Qt.ElideNone)
+        self.tabWidget_Interpolacao_OK.setUsesScrollButtons(True)
         self.tabs_kriging = self.tabWidget_Interpolacao_OK  # backwards-compatible alias
 
         # Tab 0: kriging map visualization

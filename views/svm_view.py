@@ -123,6 +123,8 @@ class SVMView(QWidget):
         # Results tabs. Index order matches the legacy tabWidget_Interpolacao_SVM:
         #   0 = train features / labels, 1 = cross-validation, 2 = interpolated map.
         self.tabWidget_Interpolacao_SVM = QtWidgets.QTabWidget()
+        self.tabWidget_Interpolacao_SVM.setElideMode(QtCore.Qt.ElideNone)
+        self.tabWidget_Interpolacao_SVM.setUsesScrollButtons(True)
         self.tabs_svm = self.tabWidget_Interpolacao_SVM  # backwards-compatible alias
 
         # Tab 0: training features + labels

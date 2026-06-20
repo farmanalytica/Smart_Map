@@ -48,6 +48,8 @@ class ZonesView(QWidget):
         # The whole zones workflow lives inside a tab widget so the controller
         # can drive the user through Maps -> Vars -> FPI/NCE -> Class.
         self.tabWidget_ZM = QTabWidget()
+        self.tabWidget_ZM.setElideMode(QtCore.Qt.ElideNone)
+        self.tabWidget_ZM.setUsesScrollButtons(True)
 
         # ---------------------------------------------------------- Tab 0: Maps
         maps_widget = QWidget()
