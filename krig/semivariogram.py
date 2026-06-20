@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 /***************************************************************************
-#Arquivo: semivariogram.py
+# File: semivariogram.py
 
                                  A QGIS plugin
 
@@ -27,7 +27,7 @@ from . import variogram_models
 import platform
 
 
-file_dir = os.path.dirname(os.path.abspath(__file__))                          #get the directory of currenty file python in execute
+file_dir = os.path.dirname(os.path.abspath(__file__))                          # directory of this Python file
 name_log = 'log.txt'
 
 
@@ -41,17 +41,17 @@ def Log(msg):
 system = platform.system()  #[Windows, Linux, Darwin]
 
    
-if system != 'Darwin':  #MacOS apresenta erro ao gravar em arquivo txt o log do semivarigrama    
+if system != 'Darwin':  # macOS errors when writing the semivariogram log to a txt file    
 
     
     f = open(os.path.join(file_dir, name_log), 'w')                                #open(name_log, "w")
-    f.write('\nArquivo de Log SmartMap\n')
+    f.write('\nSmartMap Log File\n')
     f.close()
 
 
 class Semivariogram:
-    
-    #dicionário com os modelos de semivariograma implementados
+
+    # Theoretical semivariogram models available for fitting
     variogram_dict = {
         "linear": variogram_models.linear_variogram_model,
         "linear-sill": variogram_models.linear_sill_variogram_model,
@@ -63,88 +63,87 @@ class Semivariogram:
     
     def __init__(self,xy,z):
         """
-        Função de Inicialização da Classe Semivariogram
+        Initialize a Semivariogram from sample points.
+
         Parameters
         ----------
-        xy é matriz n x 2 , com as coordenadas x e y dos pontos experimentais
-        z é vetor com os valores de atributo para cada ponto experimetnal
+        xy : n x 2 array-like
+            x and y coordinates of the sample (experimental) points.
+        z : array-like
+            Attribute value measured at each sample point.
 
         Returns
         -------
         None.
-
         """
-        
-        if system != 'Darwin':  #MacOS apresenta erro ao gravar em arquivo txt o log do semivarigrama    
-            Log('\nIniciando Geracao do Semivariograma\n')
 
-        
-        #Constroe um banco de dados no pandas
+        if system != 'Darwin':  # macOS errors when writing the semivariogram log to a txt file
+            Log('\nStarting semivariogram generation\n')
+
+
+        # Build a pandas DataFrame holding every point pair
         self.var=pd.DataFrame().astype('float32')
-        #Columa do banco de dados com as distâncias
+        # Column with the pairwise distances (lag)
         self.var['lag']=spatial.distance.pdist(xy, metric='euclidean')
-        #Columa com todas as semivariâncias
+        # Column with the squared differences (raw semivariances)
         self.var['gamma']=[(y - x)**2 for x, y in it.combinations(z, 2)]
-        
-        #Mímina e máxima distância entre pontos experimentais
-        self.min_dist=self.var['lag'].min()
-        #Usado para calcular a distância ativa
-        self.max_dist=self.var['lag'].max()
-        #Calcula a Variancia da Amostra
-        self.sample_variance=z.var()        
 
-        #Ordena em ordem crescente de acordo com a distância
-        #O vetor gamam acompanha a ordenação
-        self.var=self.var.sort_values(by='lag',ignore_index=True) #o index não é atualizado
+        # Minimum distance between sample points
+        self.min_dist=self.var['lag'].min()
+        # Maximum distance, used to derive the active distance
+        self.max_dist=self.var['lag'].max()
+        # Sample variance of the attribute
+        self.sample_variance=z.var()
+
+        # Sort by ascending distance; gamma follows the same ordering
+        self.var=self.var.sort_values(by='lag',ignore_index=True) # reset the index after sorting
    
          
 		
     def Exp_Semiv(self, dist_lag, active_dist):  
         
         """
-        Função para gerar o semivariograma experimental, com base nos ponto xy e no valor de atributo z
-       
-        #dist lag é a distância que define os grups de distancias
-        
-       
-        Retorna o vetor de distância média, a semivariância e o número de pontos usados para construir
-        o semivarigorama
-       
-       
-       """
+        Build the experimental semivariogram from the sample points and their
+        attribute values.
 
-        #Remove os pontos com distância > distância ativa
+        Parameters
+        ----------
+        dist_lag : float
+            Lag width (h) that defines the distance bins.
+        active_dist : float
+            Maximum distance to consider; pairs farther apart are discarded.
+
+        Returns
+        -------
+        lag, gamma, npoints
+            Mean distance per bin, the semivariance per bin, and the number of
+            point pairs used to build each lag.
+        """
+
+        # Drop point pairs farther apart than the active distance
         remove_index=self.var[self.var['lag'] > active_dist ].index
-        #O vetor se as distâncias maiores que o defenido pelo usuário
-        #são salvos em outro vetor
         self.var=self.var.drop(remove_index)
 
-        # a distância do lag (h) padrão é 
-        #Vetor para classificar as distância
-
+        # Bin edges used to classify the distances
         bins=np.arange(self.min_dist,max(self.var['lag']), dist_lag)
 
-        #Classifica as distâncias conforme o vetor
+        # Assign each distance to a bin
         ind = np.digitize(self.var['lag'],bins)
-        
-        #Agrupa o vetor de distâncias , obtendo-se o valor médio
+
+        # Mean distance within each bin
         lag=self.var['lag'].groupby(ind).mean()
-        
-        #group gamma e calculate mean()/2, acoording matheron estimator
-        #agrupa as semivariâncias, obtendo o indice de matheron
-        
+
+        # Mean of the squared differences halved per bin -> Matheron estimator
         gamma=self.var['gamma'].groupby(ind).mean().div(2)
 
-        #obtem o número de pares de pontos usado para construir cada lag
+        # Number of point pairs in each lag
         npoints=self.var['lag'].groupby(ind).count()
 
-        
-        #
-        self.lag=lag.to_numpy()     #convert pandas series to numpy
-        self.gamma=gamma.to_numpy() #convert pandas series to numpy
-        
-        
-        #retorna ao usuario
+
+        self.lag=lag.to_numpy()     # pandas Series -> numpy
+        self.gamma=gamma.to_numpy() # pandas Series -> numpy
+
+
         return self.lag.astype('float32'),self.gamma.astype('float32'),npoints
         
     
@@ -152,17 +151,24 @@ class Semivariogram:
     def Gamma(self,model,parameter):
         
         """
-        A partir do vetor de distâncias (self.lag),
-        calcula o vetor de semivariância teorica, a partir da distância
-        model é o modelo de semivariograma escolhido
-        [linear, linear-sill,spherical,gaussian,exponential,hole-effect]
-        parameter é o efeito pepita, alcance e patamar do modelo escolhido
-        
-        Retorno
-        gamma T é a semivariância teórica
-        rss é a soma de quadrado do resíduo
-        r2 é o coeficiente de determinação
-        
+        Evaluate the theoretical semivariance from the lag vector (self.lag).
+
+        Parameters
+        ----------
+        model : str
+            Chosen semivariogram model: one of linear, linear-sill, spherical,
+            gaussian, exponential, hole-effect.
+        parameter : sequence
+            Model parameters as [nugget, range, sill].
+
+        Returns
+        -------
+        gammaT : ndarray
+            Theoretical semivariance.
+        rss : float
+            Residual sum of squares.
+        r2 : float
+            Coefficient of determination.
         """
 
         #Nugget = self.models[self.model][0]
@@ -183,21 +189,19 @@ class Semivariogram:
     def Fit(self,list_model):
         
         """
-        Função para ajustar o modelo teório com base no lag e gamma 
-        
-        list_model é a lista de modelo a ser usada no ajuste
-        [linear, linear-sill,spherical,gaussian,exponential,hole-effect]
-        
-        Return
-        
-        Dicionário com o resultado do ajuste para a lista de modelos
-        
-        a chave de cada elemento o nome do modelo
-        
-        o valor de cada elemento é uma lista com 
-        [efeito pepita, alcance, patamar, soma quadrado residuo , r2]
-        
-       
+        Fit the theoretical model(s) to the experimental lag and gamma.
+
+        Parameters
+        ----------
+        list_model : list of str
+            Models to fit: any of linear, linear-sill, spherical, gaussian,
+            exponential, hole-effect.
+
+        Returns
+        -------
+        dict
+            One entry per model. The key is the model name; the value is the
+            list [nugget, range, sill, residual_sum_of_squares, r2].
         """
         #Adjust the theoretical semivariogram model
         lag=self.lag
@@ -228,8 +232,8 @@ class Semivariogram:
         #
         for model in list_model:
 
-            if system != 'Darwin':  #MacOS apresenta erro ao gravar em arquivo txt o log do semivarigrama    
-                Log('\n\nPara o modelo:'+ model+'\n')
+            if system != 'Darwin':  # macOS errors when writing the semivariogram log to a txt file
+                Log('\n\nFor model: '+ model+'\n')
 
             check=True #option of curve_fit to check finite values
 
@@ -239,11 +243,11 @@ class Semivariogram:
             try:
                 #
 
-                if system != 'Darwin':  #MacOS apresenta erro ao gravar em arquivo txt o log do semivarigrama    
-                
-                    Log('Usando Curve Fit and Check_Finite:'+ str(check))
-                    
-                    Log('\nChutes Iniciais : Nugget: '+str(Nugget)+'  Sill: '+str(Sill)+ '  Range: '+str(Range))
+                if system != 'Darwin':  # macOS errors when writing the semivariogram log to a txt file
+
+                    Log('Using Curve Fit with Check_Finite: '+ str(check))
+
+                    Log('\nInitial guesses : Nugget: '+str(Nugget)+'  Sill: '+str(Sill)+ '  Range: '+str(Range))
     
                     Log('\nlag , Gamma')
                 
@@ -270,7 +274,7 @@ class Semivariogram:
                 try :
                     
                      check=False #option of curve_fit to check finite values
-                     Log('Usando Curve Fit and Check_Finite:'+ str(check))
+                     Log('Using Curve Fit with Check_Finite: '+ str(check))
                     
                      #return Nugget, Range , Sill and estimated covariance (not used)
                      [Nugget,Range,Sill], _ = curve_fit(func, lag, gamma,method='trf', check_finite = check, p0=self.init_vals ,bounds=(0, maxlim) )
@@ -285,11 +289,11 @@ class Semivariogram:
                     
             #except RuntimeError:
 
-                if system != 'Darwin':  #MacOS apresenta erro ao gravar em arquivo txt o log do semivarigrama    
+                if system != 'Darwin':  # macOS errors when writing the semivariogram log to a txt file    
 
                     Log('Error at Curve Fit: least-squares minimization fails. Change to Golden Rule')
                      
-                    Log('Chutes Iniciais : Nugget: '+str(Nugget)+' Sill: '+str(Sill)+ ' Range: '+str(Range))
+                    Log('Initial guesses : Nugget: '+str(Nugget)+' Sill: '+str(Sill)+ ' Range: '+str(Range))
                      
                     Log ('\nlag , Gamma')
                     
@@ -302,17 +306,17 @@ class Semivariogram:
           
             else:
 
-                if system != 'Darwin':  #MacOS apresenta erro ao gravar em arquivo txt o log do semivarigrama                    
-                    Log('Nenhum erro na Curve Fit ')
-                
+                if system != 'Darwin':  # macOS errors when writing the semivariogram log to a txt file                    
+                    Log('No error in Curve Fit')
+
             finally:
 
-                #Calculate residual sum of square , whre error = gamma experimental - gamma fit
+                # Residual sum of squares, where error = experimental gamma - fitted gamma
                 _,rss,r2=self.Gamma(model,[Nugget,Range,Sill])
                 dict_results [model]  = [Nugget,Range,Sill,rss,r2]
         
-        if system != 'Darwin':  #MacOS apresenta erro ao gravar em arquivo txt o log do semivarigrama    
-            Log('\nAjuste Finalizado\n')
+        if system != 'Darwin':  # macOS errors when writing the semivariogram log to a txt file    
+            Log('\nFitting finished\n')
 
         return dict_results
     
@@ -321,7 +325,7 @@ class Semivariogram:
         
         fp = -1;
          
-        #Inicialization
+        # Initialization
         r = 0.618033989
         xl = xlow
         xu = xhigh
@@ -398,7 +402,7 @@ class Semivariogram:
        
         maxIt=25
         es=0.01
-        imaxit = 25   # maxumum interation of gold rule
+        imaxit = 25   # maximum iterations of the golden-section rule
         j = 1;
        
         lag=self.lag
@@ -411,7 +415,7 @@ class Semivariogram:
         Sill=self.init_vals[2]
 
        
-        #Calculate residual sum of square , whre error = gamma experimental - gamma fit
+        # Residual sum of squares, where error = experimental gamma - fitted gamma
         _,fant,_=self.Gamma(model,[Nugget,Range,Sill])
         
         while True:
@@ -441,8 +445,8 @@ class Semivariogram:
                 if ((j >= imaxit) or (error < es)) : break
                     
                    
-        if system != 'Darwin':  #MacOS apresenta erro ao gravar em arquivo txt o log do semivarigrama    
-            Log("Ajuste com sucesso Usando a Gold Rule")
+        if system != 'Darwin':  # macOS errors when writing the semivariogram log to a txt file    
+            Log("Fitted successfully using the Golden Rule")
         
         return Nugget,Range,Sill
     

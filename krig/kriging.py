@@ -1,7 +1,7 @@
 # coding: utf-8
 """
 /***************************************************************************
-#Arquivo: kriging.py
+# File: kriging.py
 
                                  A QGIS plugin
 
@@ -29,8 +29,8 @@ import scipy.linalg.lapack
 class OrdinaryKriging:
     
 
-    eps = 1.0e-10  # Cutoff for comparison to zero
-    #dicionário com os modelos de semivariograma implementados
+    eps = 1.0e-10  # Cutoff below which a distance is treated as zero
+    # Theoretical semivariogram models available for kriging
     variogram_dict = {
         "linear": variogram_models.linear_variogram_model,
         "linear-sill": variogram_models.linear_sill_variogram_model,
@@ -48,18 +48,22 @@ class OrdinaryKriging:
         variogram_parameters):
         
         """
-        Função de Inicialização da Classe OrdinaryKriging
+        Initialize an OrdinaryKriging interpolator.
+
         Parameters
         ----------
-        xy é matriz n x 2 , com as coordenadas x e y dos pontos experimentais
-        z é vetor com os valores de atributo para cada ponto experimetnal
-        variogram_model é o modelo do semivariograma teorio
-        variogram parameters é os parametros do modelo [nugget, range , sill]
+        xy : n x 2 array-like
+            x and y coordinates of the sample (experimental) points.
+        z : array-like
+            Attribute value measured at each sample point.
+        variogram_model : str
+            Name of the theoretical semivariogram model (see variogram_dict).
+        variogram_parameters : sequence
+            Model parameters as [nugget, range, sill].
 
         Returns
         -------
         None.
-
         """
         
         self.x=xy.iloc[:,0]
@@ -70,9 +74,9 @@ class OrdinaryKriging:
         
         self.variogram_model_parameters=variogram_parameters
         
-        # set up variogram model and parameters...
+        # Set up variogram model and parameters
         self.variogram_model = variogram_model
-        #configura a funcao semivariograma a ser executada
+        # Resolve the semivariogram function to evaluate
         self.variogram_function = self.variogram_dict[self.variogram_model]
 
         
@@ -80,77 +84,75 @@ class OrdinaryKriging:
     def Grid (self,pixel_x,pixel_y,has_contour,points):
         
         """
-        Função para gerar a malha de pontos paara interpolação
-        
-        pixel_x é o tamanho da grade (pixel), em x
-        
-        pixel_y é o tamanho da grade (pixel), em y
-        
-        has_countour é uma variavel boleana, indicando se o contorno foi definido
-        
-       points é a matriz com os pontos de contorno (se foi definido), ou os pontos amostrais (se o
-       contorno não foi definido)
-       Primeira coluna é X e a segunda Y
-        
-        Return
-        
-        matriz n x 2 . Se o contorno foi definido, a matriz contêm apenas os pontos dentro do contorno.
-        Se o contorno não foi definido, a matriz contem todos os pares de pontos no retangulo definido
-        entre xmin e y min, até xmax e ymax
+        Build the grid of points where interpolation will be performed.
+
+        Parameters
+        ----------
+        pixel_x : float
+            Grid cell (pixel) size along x.
+        pixel_y : float
+            Grid cell (pixel) size along y.
+        has_contour : bool
+            Whether a boundary contour has been defined.
+        points : n x 2 array-like
+            Contour vertices when has_contour is True, otherwise the sample
+            points. Column 0 is X, column 1 is Y.
+
+        Returns
+        -------
+        n x 2 ndarray
+            When a contour is defined, only the grid points inside it. Otherwise
+            every grid point in the bounding rectangle from (xmin, ymin) to
+            (xmax, ymax).
         """
- 
-        # Generate the grid to start the kriging process
-        #Find min and max of contour
+
+        # Bounding box of the input points
         x_min = points.iloc[:,0].min()
         x_max = points.iloc[:,0].max()
-    
+
         y_min = points.iloc[:,1].min()
         y_max = points.iloc[:,1].max()
-        
-        #Generate the grid
-        #+ grid it is to force use x_max. the stop is not used in arange
+
+        # Grid axes. arange excludes the stop value, so x_max/y_max are not reached
         gridx = np.arange(x_min, x_max, pixel_x)
         gridy = np.arange(y_min, y_max, pixel_y)
-        
-       
-        # Generate a polygon with contour, if contour it is defined
+
+
+        # Build the contour polygon once, if a contour was defined
         if has_contour:
             contours = mplPath.Path(np.array(points))
-        
-        # Generate a array with all grid points inside contour
-        #gridxy it is a n x 2 , where n its the number o points
+
+        # Collect grid points as an n x 2 list (cell centers)
         gridxy=[]
-        #
-        # Run all combination of i and j points of grid
+        # Iterate over every (i, j) cell of the grid
         for i in gridx:
             for j in gridy:
-                # if point it is internal of contour and contour it is definided
+                # Keep the cell center only if it falls inside the contour
                 if has_contour:
                     if contours.contains_point((i+(pixel_x/2),j-(pixel_y/2))):
                         gridxy.append([i+(pixel_x/2),j-(pixel_y/2)])
-                
-                #if has_countor is not defined
+
+                # No contour: keep every cell center
                 else :
                     gridxy.append([i+(pixel_x/2),j-(pixel_y/2)])
-                    
-        
-        #return a nx2 array with pair of point internal of contour
+
+
+        # n x 2 array of grid points (inside the contour when defined)
         return np.array(gridxy)
 
     def _get_kriging_matrix(self, n):
         """
-        Versão modificada da função do PyKrige
-        Assembles the kriging matrix.
-        
-        Build the matrix C of kriging. Matrix with the covariance between 
-        all experimental points, with n+1 x n+1 dimension
-        
+        Assemble the ordinary kriging matrix (modified from PyKrige).
+
+        Builds the (n+1) x (n+1) kriging matrix C holding the covariance
+        between every pair of sample points, plus the Lagrange-multiplier
+        row/column that enforces unbiasedness.
         """
-        #forma vetor nx2
+        # Stack coordinates into an n x 2 array
         xy = np.concatenate((self.x.to_numpy(float)[:, np.newaxis], self.y.to_numpy(float)[:, np.newaxis]), axis=1 )
 
         self.xy=xy
-        #forma vetor de distancias nxn
+        # Pairwise distance matrix, n x n
         d = cdist(xy, xy, "euclidean")
         #
         a = np.zeros((n + 1, n + 1))
@@ -168,94 +170,88 @@ class OrdinaryKriging:
     def _exec_loop(self,a_all,xypts,n):
             
         """
-          
-        Versão modificada da função do PyKrige
-         
-        Funcao que calcula o   valor inteprpolado e o desvio padrao da estimacao
-        em cada ponto da grande
-         
-         
-        a_alls é a matriz de covariancia entre todos pontos experimentais, com dimensão n+1
-        
-        xypts sao as coordenadas dos pontos da grade onde a interpolacao será realizada.
-        
-        n é o numero de pontos experimentais
-        
-        Retorna zvalue e sigma
-        
+        Compute the interpolated value and the estimation standard deviation
+        at every grid point (modified from PyKrige).
+
+        Parameters
+        ----------
+        a_all : (n+1) x (n+1) ndarray
+            Covariance matrix between all sample points.
+        xypts : array-like
+            Coordinates of the grid points to interpolate.
+        n : int
+            Number of sample points.
+
+        Returns
+        -------
+        zvalues, sigma
+            Interpolated values and their estimation standard deviations.
         """
-         
-        #comprimento do vetor de pontos da grade
+
+        # Number of grid points
         npt= len(xypts)
-        #Vetor para guardar resultados     
+        # Output buffers
         zvalues=np.zeros(npt)
         sigmasq=np.zeros(npt)
-        
-        #monta arvore de procura de pontos experimentais
-        #self.xy (obtido em _get_kriging_matrix), é vetor de pontos experimentais com
-        #dimensão nx2 
+
+        # Build a spatial search tree over the sample points.
+        # self.xy (set in _get_kriging_matrix) is the n x 2 sample-point array.
         tree = cKDTree(self.xy)
-        
-        
-        #p=2 use Euclian Distance
-        #njobs=-1 use all processor of computer
-        #distance_upper_bound, maxima distancia para achar vizinhos
-        #query completa a matriz idx com o comprimento do vetor de pontos
-        #experimentais, quanto não acha k vizinhos no raio definido
-
-        #dist_all,ids_all=tree.query(xypts,k=self.n_closest_points,p=2, 
-        #                distance_upper_bound=self.radius, n_jobs=-1)     #funciona para as versões anteriores ao QGIS 3.28 
-        
-        #dist_all,ids_all=tree.query(xypts,k=self.n_closest_points,p=2, 
-        #                distance_upper_bound=self.radius, workers=-1)    #funciona a partir da versão ao QGIS 3.28 
-        
-        dist_all,ids_all=tree.query(xypts,k=self.n_closest_points,p=2, 
-                        distance_upper_bound=self.radius)                 #remoção do parametro workers 
 
 
-        #calculada para 4 vizinhos, sem considerar radio de busca
-        #Consume menos tempo de processamento
-        
-        #dist_4n,ids_4n=tree.query(xypts,k=4,p=2,workers=-1)             
-        
-        dist_4n,ids_4n=tree.query(xypts,k=4,p=2)                         #remoção do parametro workers  
+        # p=2 -> Euclidean distance.
+        # distance_upper_bound -> max radius to search for neighbors.
+        # When fewer than k neighbors lie within the radius, query() pads the
+        # index array with n (an out-of-range sentinel) and distance inf.
 
-        
-        #para cada ponto da grade
+        #dist_all,ids_all=tree.query(xypts,k=self.n_closest_points,p=2,
+        #                distance_upper_bound=self.radius, n_jobs=-1)     # for QGIS < 3.28
+        #dist_all,ids_all=tree.query(xypts,k=self.n_closest_points,p=2,
+        #                distance_upper_bound=self.radius, workers=-1)    # for QGIS >= 3.28
+
+        dist_all,ids_all=tree.query(xypts,k=self.n_closest_points,p=2,
+                        distance_upper_bound=self.radius)                 # workers parameter dropped
+
+
+        # Fallback query for the 4 nearest neighbors, ignoring the search radius.
+        # Cheaper, used when the radius search returns fewer than 4 neighbors.
+        #dist_4n,ids_4n=tree.query(xypts,k=4,p=2,workers=-1)
+        dist_4n,ids_4n=tree.query(xypts,k=4,p=2)                         # workers parameter dropped
+
+
+        # For each grid point
         for i in range(npt):
-            
-            #ids dos vizinhos, para o ponto i da grade 
+
+            # Neighbor ids for grid point i
             ids=ids_all[i]
-            
-            #distancia ate vizinhos, para o ponto i da grade 
+
+            # Distances to those neighbors
             dist=dist_all[i]
-            
-            #remove pontos, que foram completados
-            #query completa a matriz idx com o comprimento do vetor de pontos
-            #experimentais, quanto não acha k vizinhos no raio definido
+
+            # Drop the padded sentinels (id == n) added when fewer than k
+            # neighbors were found within the radius.
             idx_del = np.argwhere(ids == n)
             dist = np.delete(dist, idx_del)
             ids = np.delete(ids, idx_del)
-             
-             #numero vizinhos encontrados
+
+            # Number of neighbors actually found
             n_neig=len(ids)
-            
-               
-             #Se achar menos que 4, procura os 4 mais proximos, sem considerar
-             #o radio de busca
+
+
+            # If fewer than 4, fall back to the 4 nearest (radius ignored)
             if n_neig<4:
                  n_neig=4
-                 #usa os valores já calculados previamente
+                 # Reuse the precomputed 4-nearest results
                  ids=ids_4n[i]
                  dist=dist_4n[i]
 
-   
-            #Na matrix a (c), seleciona a covariancia dos pontos que são vizinhos
-            #no ponto i
+
+            # Select, from matrix a (C), the covariances among the neighbors
+            # of point i (plus the Lagrange row/column).
             a_selector = np.concatenate((ids, np.array([a_all.shape[0] - 1])))
             a = a_all[a_selector[:, None], a_selector]
-             
-            #valor de indice inferiores ao cutoof (eps) são adotados como zero
+
+            # Distances at or below the cutoff (eps) are treated as zero
             if np.any(np.absolute(dist) <= self.eps):
                 zero_value = True
                 zero_index = np.where(np.absolute(dist) <= self.eps)
@@ -270,17 +266,16 @@ class OrdinaryKriging:
                 b[zero_index[0], 0] = 0.0
             b[n_neig, 0] = 1.0
             
-            # calculating the determinant of matrix
-            det_a = np.linalg.det(a)            
-            #print(det_a)
-            #determinante igual a zero não consegue inverter a matriz 
-            #logo irá gerar erro: numpy.linalg.LinAlgError: Singular matrix Error
-            #para resolver usar solução dos mínimos quadrados: 
-            #https://stackoverflow.com/questions/64527098/numpy-linalg-linalgerror-singular-matrix-error-when-trying-to-solve
-            if det_a == 0:  
+            # Determinant of the kriging matrix
+            det_a = np.linalg.det(a)
+            # A zero determinant means the matrix is singular and cannot be
+            # inverted, which would raise numpy.linalg.LinAlgError: Singular
+            # matrix. Fall back to a least-squares solution in that case.
+            # https://stackoverflow.com/questions/64527098/numpy-linalg-linalgerror-singular-matrix-error-when-trying-to-solve
+            if det_a == 0:
               x = np.linalg.lstsq(a, b, rcond=None)[0]
-            else: 
-              #x = np.linalg.lstsq(a, b, rcond=None)[0]  
+            else:
+              #x = np.linalg.lstsq(a, b, rcond=None)[0]
               x = scipy.linalg.solve(a, b)
 
             zvalues[i] = x[:n_neig, 0].dot(self.z[ids])
@@ -297,36 +292,41 @@ class OrdinaryKriging:
         radius):
         
         """
-        Função que executa a interpolação por krigagem
-        xpoints e ypoitns são as coordenadas x e y, dos pontos a serem interpolados (grade)
-        
-         
-        n_closest_points é o número de vizinhos a serem usados na interpolação. 
-        
-        radius é o raio de busca por vizinhos
-        
-        ***A prioridade será o radio de busca. Se , para um raio de busca
-        achar mais vizinhos que o configurado no  n_closest_points, usa o numero configurado.
-        Caso contrário, usa o número que encontrar, com valor minimo de 4.
-        
-        Return
-        
-        zvalues vetor com os valores interpolado por krigagem ordinária 
-        
-        sigmasq desvio padrão assoiado com o valor interpolado
-        
+        Run the ordinary kriging interpolation.
+
+        Parameters
+        ----------
+        xypoints : array-like
+            x and y coordinates of the grid points to interpolate.
+        n_closest_points : int
+            Number of neighbors to use in the interpolation.
+        radius : float
+            Search radius for neighbors.
+
+        Notes
+        -----
+        The search radius takes priority. If more neighbors than
+        n_closest_points fall within the radius, only n_closest_points are
+        used; otherwise all neighbors found are used, with a minimum of 4.
+
+        Returns
+        -------
+        zvalues : ndarray
+            Values interpolated by ordinary kriging.
+        sigmasq : ndarray
+            Estimation standard deviation associated with each value.
         """
         self.radius=radius
         self.n_closest_points=n_closest_points
-        
-       
-        #comprimento do vetor de pontos experimentais
+
+
+        # Number of sample points
         n = len(self.x)
-        
-        #Get Matrix C for krigind (matrix of covariance between all experimental points)
+
+        # Matrix C for kriging (covariance between all sample points)
         a = self._get_kriging_matrix(n)
-      
-        #chama funcao para executar krigagem em cada ponto do grid
+
+        # Interpolate at every grid point
         zvalues, sigmasq = self._exec_loop(a, xypoints,n)
  
 
