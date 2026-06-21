@@ -40,7 +40,7 @@ class SmartMapDialog(QDialog):
         # Setup UI
         self.setWindowTitle('Smart-Map - Kriging Interpolation and Machine Learning')
         self.setWindowIcon(QIcon(icon_path))
-        self.setMinimumSize(1000, 700)
+        self.setMinimumSize(820, 560)
         self.setWindowFlags(self.windowFlags() | QtCore.Qt.WindowMinimizeButtonHint)
 
         self._setup_ui()

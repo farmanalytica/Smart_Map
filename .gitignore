@@ -47,6 +47,7 @@ htmlcov/
 # QGIS/Project specific
 *.qgz~
 execute_number.txt
+krig/log.txt
 
 # Provisioned third-party deps (extracted at runtime by extlibs_manager)
 extlibs/

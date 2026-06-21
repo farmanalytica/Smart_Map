@@ -467,8 +467,13 @@ class GridController:
         plt1.savefig(png_path)
 
         pixmap = QPixmap(png_path)
-        self.dialog.label_pontos_limite.setPixmap(pixmap)
-        self.dialog.label_pontos_limite.show()
+        label = self.dialog.label_pontos_limite
+        if label.width() > 0 and label.height() > 0:
+            pixmap = pixmap.scaled(
+                label.width(), label.height(),
+                QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+        label.setPixmap(pixmap)
+        label.show()
 
     def on_contour_label_clicked(self, value):
         """Show contour help."""

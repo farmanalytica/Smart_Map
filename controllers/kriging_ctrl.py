@@ -14,6 +14,7 @@ from qgis.PyQt.QtGui import QIcon, QPixmap
 
 from ..krig import kriging
 from ..utils import functions
+from ..workers.interpolation_worker import InterpolationWorker
 
 
 class KrigingController:
@@ -38,6 +39,14 @@ class KrigingController:
         self.arr_cut = None
         self.df_CV_OK = None
 
+        # Background workers (kept as attributes so the QThread is not
+        # garbage-collected while running).
+        self._cv_worker = None
+        self._cv_progress = None
+        self._krig_worker = None
+        self._krig_progress = None
+        self._krig_xygrid = None
+
         # Workflow flags
         self.Krigagem = False
         self.Validacao_Cruzada_OK = False
@@ -58,7 +67,12 @@ class KrigingController:
 
     # ----------------------------------------------------------- kriging
     def on_kriging_clicked(self):
-        """Execute ordinary kriging interpolation."""
+        """Start ordinary kriging interpolation off the UI thread.
+
+        Grid building + parameter reads run here (main thread); the heavy
+        ok.execute() runs in an InterpolationWorker and results render in
+        _on_kriging_finished.
+        """
         if not self.variogram_ctrl.Variogram:
             self._show_warning(
                 self.tr('Message'),
@@ -66,10 +80,37 @@ class KrigingController:
             )
             return
 
+        if self._krig_worker is not None and self._krig_worker.isRunning():
+            return  # an interpolation run is already in progress
+
+        job = self._prepare_kriging()
+        if job is None:
+            return
+        params, xygrid = job
+
+        # Hand the heavy execute() to a worker; render in the finished slot
+        # (matplotlib, table fill and QGIS layer-load stay on the main thread).
+        self._krig_xygrid = xygrid
+        self._krig_progress = self._create_busy_dialog(self.tr('Ordinary Kriging') + '...')
+
+        worker = InterpolationWorker(self.interp_mgr, 'kriging', **params)
+        worker.finished.connect(self._on_kriging_finished)
+        worker.error.connect(self._on_kriging_error)
+        worker.finished.connect(worker.deleteLater)
+        self._krig_worker = worker
+        worker.start()
+
+    def _prepare_kriging(self):
+        """Read params + build the interpolation grid (main thread).
+
+        Returns (params, xygrid) where params are the kwargs for
+        InterpolationManager.execute_kriging, or None if setup failed (a warning
+        is shown). Grid building touches grid_ctrl/UI state, so it must run on
+        the main thread for both the async button and the blocking batch path.
+        """
         try:
             data_view = self.data_ctrl.dialog
 
-            # Grid + search parameters
             grid_x = data_view.SpinBox_Pixel_Size_X.value()
             grid_y = data_view.SpinBox_Pixel_Size_Y.value()
             n_neig = int(self.view.lineEdit_OK_VBNumMax.text())
@@ -78,7 +119,6 @@ class KrigingController:
             model = self._get_model()
             var_params = self._get_variogram_params()
 
-            # Create kriging object
             ok = kriging.OrdinaryKriging(
                 self.data_ctrl.xy, self.data_ctrl.z,
                 variogram_model=model,
@@ -112,32 +152,55 @@ class KrigingController:
                 df_limite = pd.DataFrame(np.atleast_2d(limite), columns=['Coord_X', 'Coord_Y'])
                 xygrid = ok.Grid(grid_x, grid_y, has_contour, df_limite)
 
-            # Progress dialog
-            maximum = (len(xygrid) * 3) + 5
-            progress = self._create_progress_dialog(
-                self.tr('Ordinary Kriging') + '...',
-                maximum
-            )
+        except Exception as e:
+            self._show_warning(self.tr('Error'), self.tr('Kriging error') + ': ' + str(e))
+            return None
 
-            cont = 1
-            progress.setValue(cont)
-            if progress.wasCanceled():
-                progress.close()
-                return
+        params = dict(
+            xy=self.data_ctrl.xy, z=self.data_ctrl.z,
+            model=model, variogram_params=var_params,
+            xygrid=xygrid, n_neighbors=n_neig, search_radius=raio_busca,
+        )
+        return params, xygrid
 
-            # Execute kriging
-            z_est_py, ss = ok.execute(xygrid, n_closest_points=n_neig, radius=raio_busca)
+    def _run_kriging_blocking(self):
+        """Synchronous kriging for the batch loop (one variable at a time).
 
+        Reuses _prepare_kriging + _on_kriging_finished; runs the compute inline
+        so the batch iteration waits for each variable to finish.
+        """
+        job = self._prepare_kriging()
+        if job is None:
+            return
+        params, xygrid = job
+        self._krig_xygrid = xygrid
+        self._krig_progress = None
+        try:
+            result = self.interp_mgr.execute_kriging(**params)
+        except Exception as e:
+            self._show_warning(self.tr('Error'), self.tr('Kriging error') + ': ' + str(e))
+            return
+        self._on_kriging_finished(result)
+
+    def _on_kriging_error(self, message):
+        """Kriging failed in the worker thread."""
+        if self._krig_progress is not None:
+            self._krig_progress.close()
+            self._krig_progress = None
+        self._krig_worker = None
+        self._show_warning(self.tr('Error'), self.tr('Kriging error') + ': ' + message)
+
+    def _on_kriging_finished(self, result):
+        """Render kriging results (main thread): CSVs, table, rasters, plot."""
+        try:
+            data_view = self.data_ctrl.dialog
+
+            z_est_py, ss = result
             z_est_py = z_est_py.reshape(-1, 1)
             ss = ss.reshape(-1, 1)
 
+            xygrid = self._krig_xygrid
             self.arr_cut = np.vstack((xygrid[:, 0], xygrid[:, 1], z_est_py[:, 0], ss[:, 0])).T
-
-            cont += 1
-            progress.setValue(cont)
-            if progress.wasCanceled():
-                progress.close()
-                return
 
             # Save results
             df_results = pd.DataFrame(
@@ -173,12 +236,6 @@ class KrigingController:
                     item = QTableWidgetItem(str(value))
                     self.view.datatable_pontos_interpolados_OK.setItem(i, j, item)
 
-                    cont += 1
-                    progress.setValue(cont)
-                    if progress.wasCanceled():
-                        progress.close()
-                        return
-
             self.view.datatable_pontos_interpolados_OK.resizeColumnsToContents()
             self.view.datatable_pontos_interpolados_OK.setEditTriggers(
                 QtWidgets.QTableWidget.NoEditTriggers
@@ -188,12 +245,6 @@ class KrigingController:
 
             # Export interpolated raster/vector to QGIS
             if self.view.checkBox_Qgis_Raster.isChecked():
-                cont += 1
-                progress.setValue(cont)
-                if progress.wasCanceled():
-                    progress.close()
-                    return
-
                 try:
                     data_view.mMapLayerComboBox.currentIndexChanged.disconnect()
                 except TypeError:
@@ -214,11 +265,6 @@ class KrigingController:
                 if self.view.checkBox_Qgis_Vector_Points.isChecked():
                     if (data_view.checkBox_Area_Contorno.isChecked() and
                             data_view.mMapLayerComboBox_AreaCont.currentIndex() >= 0):
-                        cont += 1
-                        progress.setValue(cont)
-                        if progress.wasCanceled():
-                            progress.close()
-                            return
                         self.data_ctrl.export_shapefile_to_qgis(output_tiff, "native:pixelstopoints")
                     else:
                         self.view.checkBox_Qgis_Vector_Points.setChecked(False)
@@ -226,23 +272,12 @@ class KrigingController:
                 if self.view.checkBox_Qgis_Vector_Polygons.isChecked():
                     if (data_view.checkBox_Area_Contorno.isChecked() and
                             data_view.mMapLayerComboBox_AreaCont.currentIndex() >= 0):
-                        cont += 1
-                        progress.setValue(cont)
-                        if progress.wasCanceled():
-                            progress.close()
-                            return
                         self.data_ctrl.export_shapefile_to_qgis(output_tiff, "native:pixelstopolygons")
                     else:
                         self.view.checkBox_Qgis_Vector_Polygons.setChecked(False)
 
             # Export standard-deviation raster/vector to QGIS
             if self.view.checkBox_Krigagem_Std_Desv.isChecked():
-                cont += 1
-                progress.setValue(cont)
-                if progress.wasCanceled():
-                    progress.close()
-                    return
-
                 input_table = '1_Krig_' + self.data_ctrl.VTarget_FileName + '_Grid_Map_SD.csv'
                 output_tiff_sd = os.path.join(
                     self.path_absolute,
@@ -258,11 +293,6 @@ class KrigingController:
                 if self.view.checkBox_Qgis_Vector_Points.isChecked():
                     if (data_view.checkBox_Area_Contorno.isChecked() and
                             data_view.mMapLayerComboBox_AreaCont.currentIndex() >= 0):
-                        cont += 1
-                        progress.setValue(cont)
-                        if progress.wasCanceled():
-                            progress.close()
-                            return
                         self.data_ctrl.export_shapefile_to_qgis(output_tiff_sd, "native:pixelstopoints")
                     else:
                         self.view.checkBox_Qgis_Vector_Points.setChecked(False)
@@ -270,11 +300,6 @@ class KrigingController:
                 if self.view.checkBox_Qgis_Vector_Polygons.isChecked():
                     if (data_view.checkBox_Area_Contorno.isChecked() and
                             data_view.mMapLayerComboBox_AreaCont.currentIndex() >= 0):
-                        cont += 1
-                        progress.setValue(cont)
-                        if progress.wasCanceled():
-                            progress.close()
-                            return
                         self.data_ctrl.export_shapefile_to_qgis(output_tiff_sd, "native:pixelstopolygons")
                     else:
                         self.view.checkBox_Qgis_Vector_Polygons.setChecked(False)
@@ -288,12 +313,6 @@ class KrigingController:
                     pass
 
             # Plot the interpolated map
-            cont += 1
-            progress.setValue(cont)
-            if progress.wasCanceled():
-                progress.close()
-                return
-
             self._plot_interpolated_map()
 
             self.Krigagem = True
@@ -301,10 +320,13 @@ class KrigingController:
             # TODO(zones domain): self.load_maps_to_generate_ZM() once the zones
             # controller exposes the ZM map-loading port.
 
-            progress.close()
-
         except Exception as e:
             self._show_warning(self.tr('Error'), self.tr('Kriging error') + ': ' + str(e))
+        finally:
+            if self._krig_progress is not None:
+                self._krig_progress.close()
+                self._krig_progress = None
+            self._krig_worker = None
 
     def _plot_interpolated_map(self):
         """Render the interpolated kriging map and set the label pixmap."""
@@ -499,7 +521,9 @@ class KrigingController:
             self.view.tabWidget_Interpolacao_OK.setCurrentIndex(0)
             self.variogram_ctrl.Variogram = True
 
-            self.on_kriging_clicked()
+            # Batch stays synchronous so each variable finishes before the next;
+            # reuses the same prepare/render path as the async single-run button.
+            self._run_kriging_blocking()
 
     def on_interpolated_points_table_double_clicked(self, item):
         """Open the interpolated-points CSV."""
@@ -513,7 +537,11 @@ class KrigingController:
 
     # ---------------------------------------------------------- cross-validation
     def on_cross_validation_clicked(self):
-        """Execute kriging cross-validation (leave-one-out)."""
+        """Start kriging leave-one-out cross-validation off the UI thread.
+
+        The heavy leave-one-out loop runs in an InterpolationWorker; rendering
+        (table, statistics, plot) happens in _on_cv_finished on the main thread.
+        """
         if not self.variogram_ctrl.Variogram:
             self._show_warning(
                 self.tr('Message'),
@@ -521,30 +549,54 @@ class KrigingController:
             )
             return
 
+        if self._cv_worker is not None and self._cv_worker.isRunning():
+            return  # a cross-validation run is already in progress
+
         try:
             n_neig = int(self.view.lineEdit_OK_VBNumMax.text())
             raio_busca = float(self.view.lineEdit_OK_VBRaio.text())
 
             model = self._get_model()
             var_params = self._get_variogram_params()
+        except (ValueError, AttributeError) as e:
+            self._show_warning(self.tr('Error'), self.tr('Cross-Validation error') + ': ' + str(e))
+            return
 
-            maximum = len(self.data_ctrl.data) + (len(self.data_ctrl.data) * 4)
-            progress = self._create_progress_dialog(
-                self.tr('Cross-Validation - Kriging') + '...',
-                maximum
-            )
+        n_points = len(self.data_ctrl.data)
+        self._cv_progress = self._create_progress_dialog(
+            self.tr('Cross-Validation - Kriging') + '...',
+            n_points
+        )
 
-            # Leave-one-out cross-validation (routed through the interpolation manager).
-            labels_OK_CV = self.interp_mgr.execute_cross_validation_kriging(
-                self.data_ctrl.xy, self.data_ctrl.z, model, var_params, n_neig, raio_busca
-            )
+        worker = InterpolationWorker(
+            self.interp_mgr, 'kriging_cv',
+            xy=self.data_ctrl.xy, z=self.data_ctrl.z,
+            model=model, variogram_params=var_params,
+            n_neighbors=n_neig, search_radius=raio_busca,
+        )
+        worker.progress.connect(self._on_cv_progress)
+        worker.finished.connect(self._on_cv_finished)
+        worker.error.connect(self._on_cv_error)
+        worker.finished.connect(worker.deleteLater)
+        self._cv_worker = worker
+        worker.start()
 
-            cont = len(self.data_ctrl.data)
-            progress.setValue(cont)
-            if progress.wasCanceled():
-                progress.close()
-                return
+    def _on_cv_progress(self, value):
+        """Advance the cross-validation progress bar."""
+        if self._cv_progress is not None:
+            self._cv_progress.setValue(value)
 
+    def _on_cv_error(self, message):
+        """Cross-validation failed in the worker thread."""
+        if self._cv_progress is not None:
+            self._cv_progress.close()
+            self._cv_progress = None
+        self._cv_worker = None
+        self._show_warning(self.tr('Error'), self.tr('Cross-Validation error') + ': ' + message)
+
+    def _on_cv_finished(self, labels_OK_CV):
+        """Render cross-validation results (main thread): table, stats, plot."""
+        try:
             labels_OK_CV = np.array(labels_OK_CV)
             labels = self.data_ctrl.data[:, 2]
 
@@ -581,12 +633,6 @@ class KrigingController:
                         pass
                     item = QTableWidgetItem(str(value))
                     self.view.datatable_validacao_cruzada_OK.setItem(i, j, item)
-
-                    cont += 1
-                    progress.setValue(cont)
-                    if progress.wasCanceled():
-                        progress.close()
-                        return
 
             self.view.datatable_validacao_cruzada_OK.resizeColumnsToContents()
             self.view.datatable_validacao_cruzada_OK.setEditTriggers(
@@ -658,10 +704,13 @@ class KrigingController:
             self.Validacao_Cruzada_OK = True
             self.view.tabWidget_Interpolacao_OK.setCurrentIndex(1)
 
-            progress.close()
-
         except Exception as e:
             self._show_warning(self.tr('Error'), self.tr('Cross-Validation error') + ': ' + str(e))
+        finally:
+            if self._cv_progress is not None:
+                self._cv_progress.close()
+                self._cv_progress = None
+            self._cv_worker = None
 
     def on_cross_validation_results_double_clicked(self, item):
         """Open the cross-validation CSV."""
@@ -709,6 +758,19 @@ class KrigingController:
         progress.setCancelButton(None)
         progress.setWindowModality(QtCore.Qt.WindowModal)
         time.sleep(0.1)
+        return progress
+
+    def _create_busy_dialog(self, label):
+        """Indeterminate (busy) progress dialog for unknown-duration compute.
+
+        Range 0..0 shows a moving bar; the UI stays responsive while the worker
+        runs and the completion slot closes it.
+        """
+        progress = QProgressDialog(label, self.tr('Cancel'), 0, 0, self.view)
+        progress.setWindowTitle('Smart-Map')
+        progress.setCancelButton(None)
+        progress.setWindowModality(QtCore.Qt.WindowModal)
+        progress.show()
         return progress
 
     def _show_warning(self, title, message):

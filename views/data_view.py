@@ -62,8 +62,13 @@ class DataView(QWidget):
 
         # Points visualization
         self.label_pontos_limite = QtWidgets.QLabel()
-        self.label_pontos_limite.setMinimumHeight(150)
-        self.label_pontos_limite.setScaledContents(True)
+        self.label_pontos_limite.setMinimumHeight(360)
+        # Keep the plot's native aspect ratio (controllers scale the pixmap
+        # with KeepAspectRatio); scaledContents=True would stretch it.
+        self.label_pontos_limite.setScaledContents(False)
+        self.label_pontos_limite.setAlignment(QtCore.Qt.AlignCenter)
+        self.label_pontos_limite.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.label_pontos_limite.setStyleSheet('border: 1px solid #cccccc;')
         layout.addWidget(QLabel(self.tr('Points Visualization:')))
         layout.addWidget(self.label_pontos_limite)

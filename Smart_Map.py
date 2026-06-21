@@ -104,9 +104,6 @@ import matplotlib.pyplot as plt7  #plot Management Zones
 from scipy import spatial                                  #to calculate IDW com cKDTree.query, KDTree.query_ball_point
 
 
-#import the code for the Utilities
-#(install_deps is imported earlier, before the controller/manager imports)
-
 import numpy as np
 import pandas as pd 
 #import sklearn 
@@ -289,11 +286,11 @@ class smart_map:
         :rtype: QString
         """
 
-        #to generate file .ts using GUI 
-        #C:\ProgramData\Anaconda3\Library\bin>pylupdate5 Smart_Map_dialog.ui -ts Smart_Map_dialog.ts
+        # to generate the .ts file from the Python sources:
+        #   pylupdate5 $(find . -name '*.py') -ts i18n/smart_map_pt_to_en.ts
 
-        #to generate file  .qm using file .ts 
-        #C:\ProgramData\Anaconda3\Library\bin>lrelease smart_map_pt_to_en.ts            
+        # to generate the .qm file from the .ts file:
+        #   lrelease i18n/smart_map_pt_to_en.ts
 
 
         # noinspection PyTypeChecker,PyArgumentList,PyCallByClass

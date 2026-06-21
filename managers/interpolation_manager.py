@@ -84,8 +84,13 @@ class InterpolationManager:
         z_est, ss = ok.execute(xygrid, n_closest_points=n_neighbors, radius=search_radius)
         return z_est, ss
 
-    def execute_cross_validation_kriging(self, xy, z, model, variogram_params, n_neighbors, search_radius):
+    def execute_cross_validation_kriging(self, xy, z, model, variogram_params, n_neighbors, search_radius,
+                                         progress_cb=None):
         """Execute leave-one-out cross-validation for kriging.
+
+        Args:
+            progress_cb: optional callable(i) invoked after each left-out point,
+                used to drive a progress bar when run from a worker thread.
 
         Returns:
             array: Predicted values at left-out locations
@@ -108,6 +113,9 @@ class InterpolationManager:
             coord = [[xy.iloc[i, 0], xy.iloc[i, 1]]]
             z_est, _ = ok.execute(coord, n_closest_points=n_neighbors, radius=search_radius)
             predictions.append(z_est[0])
+
+            if progress_cb is not None:
+                progress_cb(i + 1)
 
         return np.array(predictions)
 

@@ -11,6 +11,7 @@ from qgis.PyQt.QtWidgets import QMessageBox, QTableWidgetItem
 from qgis.PyQt.QtGui import QIcon, QPixmap
 
 from ..krig import semivariogram
+from ..workers.variogram_worker import VariogramWorker
 
 
 class VariogramController:
@@ -32,6 +33,14 @@ class VariogramController:
         # Saved-semivariograms dataframe (one row per target variable, 23 columns).
         self.df_semivariograms = None
         self.list_rows_semiv = []
+
+        # Cached Semivariogram (rebuilt only when the dataset changes) and the
+        # single-flight worker state for interactive recomputes.
+        self._semiv = None
+        self._semiv_xy = None
+        self._semiv_z = None
+        self._var_worker = None
+        self._var_pending = None
 
         # Variogram state
         self.lag = None
@@ -63,180 +72,273 @@ class VariogramController:
         self.Range_Minimum = 0.1
         self.Range_Maximum = 10000.0
 
-    # Calculation (delegates to data_ctrl logic)
+    # Calculation -----------------------------------------------------------
+    #
+    # calculate_variogram is the SYNCHRONOUS path (used by batch kriging and as
+    # a fallback). Interactive handlers (sliders, edits, model combo, adjust,
+    # reset) go through _recompute_and_plot, which runs the same pure compute in
+    # a single-flight VariogramWorker and applies the result on the main thread.
+    #
+    # The expensive Semivariogram (O(n^2) pairwise build) is cached per dataset
+    # by _get_semivariogram, so re-fits during tuning only re-bin + re-fit.
+
     def calculate_variogram(self, initial_variogram, nugget_range_sill):
-        """Calculate semivariogram from data. Heavy lifting delegated to krig module."""
+        """Synchronous variogram fit (batch path / fallback)."""
         if self.data_ctrl.xy is None or self.data_ctrl.z is None:
             return
-
         try:
-            # Disconnect model combo signal
+            request = self._read_variogram_request(initial_variogram, nugget_range_sill)
+            semiv = self._get_semivariogram()
+            result = self._compute_variogram(semiv, request)
+            self._apply_variogram_result(result, initial_variogram)
+        except Exception as e:
+            self._show_warning(self.tr('Error'), str(e))
+
+    def _get_semivariogram(self):
+        """Return a cached Semivariogram, rebuilding only when the data changes.
+
+        The pairwise-distance build is the O(n^2) cost; caching it makes variogram
+        tuning (lag/model/nugget/sill/range adjustments) cheap because Exp_Semiv
+        is now non-destructive and can re-run on the same object.
+        """
+        xy = self.data_ctrl.xy
+        z = self.data_ctrl.z
+        # Identity check (and hold the refs) rather than id()/len, so a recycled
+        # address after GC can't be mistaken for the same dataset.
+        if self._semiv is None or self._semiv_xy is not xy or self._semiv_z is not z:
+            self._semiv = semivariogram.Semivariogram(xy, z)
+            self._semiv_xy = xy
+            self._semiv_z = z
+        return self._semiv
+
+    def _read_variogram_request(self, initial_variogram, nugget_range_sill):
+        """Snapshot the UI inputs the compute needs (must run on the main thread)."""
+        request = {
+            'initial': initial_variogram,
+            'nrs': nugget_range_sill,
+            'active_distance': float(self.view.lineEdit_OK_DMax.text()),
+            'lag_distance': float(self.view.lineEdit_OK_lags_dist.text()),
+            'model_idx': self.view.comboBox_Modelo.currentIndex(),
+            'user_nugget': None,
+            'user_range': None,
+            'user_sill': None,
+        }
+        if nugget_range_sill:
+            request['user_nugget'] = float(self.view.lineEdit_Nugget.text())
+            request['user_range'] = float(self.view.lineEdit_Range.text())
+            request['user_sill'] = float(self.view.lineEdit_Sill.text())
+        return request
+
+    def _compute_variogram(self, semiv, request):
+        """Pure semivariogram math — no UI access (safe to run in a worker)."""
+        model_names = ['linear', 'linear-sill', 'exponential', 'spherical', 'gaussian']
+        active_distance = request['active_distance']
+        lag_distance = request['lag_distance']
+
+        lag, gamma, npoints = semiv.Exp_Semiv(lag_distance, active_distance)
+
+        # Ensure minimum 2 lags
+        while len(npoints) < 2:
+            lag_distance -= 1
+            lag, gamma, npoints = semiv.Exp_Semiv(lag_distance, active_distance)
+
+        result = {'variancia': semiv.sample_variance}
+
+        if request['initial']:
+            use_models = list(model_names)
+            while True:
+                try:
+                    models = semiv.Fit(use_models)
+                    break
+                except ValueError as e:
+                    if 'is infeasible' in str(e):
+                        lag_distance += 1
+                        lag, gamma, npoints = semiv.Exp_Semiv(lag_distance, active_distance)
+                    else:
+                        raise
+
+            # Best model = minimum RSS
+            min_rss = models['linear'][3]
+            best_model = 'linear'
+            for model_name in models:
+                if models[model_name][3] < min_rss:
+                    min_rss = models[model_name][3]
+                    best_model = model_name
+
+            model = best_model
+            nugget, range_, sill = models[model][0:3]
+            gamma_t, _rss, _r2 = semiv.Gamma(model, [nugget, range_, sill])
+            rss_val = models[model][3]
+            r2_val = models[model][4]
+            result['model_index'] = model_names.index(best_model)
+            result['n_data'] = len(self.data_ctrl.data)
+        else:
+            model_idx = request['model_idx']
+            use_models = [model_names[model_idx]] if model_idx < len(model_names) else ['linear']
+            while True:
+                try:
+                    models = semiv.Fit(use_models)
+                    break
+                except ValueError as e:
+                    if 'is infeasible' in str(e):
+                        lag_distance += 1
+                        lag, gamma, npoints = semiv.Exp_Semiv(lag_distance, active_distance)
+                    else:
+                        raise
+
+            model = use_models[0]
+            if request['nrs']:
+                nugget = request['user_nugget']
+                range_ = request['user_range']
+                sill = request['user_sill']
+                models[model][0] = nugget
+                models[model][1] = range_
+                models[model][2] = sill
+            else:
+                nugget, range_, sill = models[model][0:3]
+
+            gamma_t, rss, r2 = semiv.Gamma(model, [nugget, range_, sill])
+            rss_val = rss
+            r2_val = r2
+            result['model_index'] = None
+            result['n_data'] = None
+
+        result.update(
+            active_distance=active_distance,
+            lag_distance=lag_distance,
+            lag=lag, gamma=gamma, npoints=npoints,
+            models=models, model=model,
+            nugget=nugget, range_=range_, sill=sill,
+            gamma_t=gamma_t, rss_val=rss_val, r2_val=r2_val,
+            gamma_last=gamma[len(gamma) - 1], max_dist=semiv.max_dist,
+        )
+        return result
+
+    def _apply_variogram_result(self, result, initial_variogram):
+        """Apply a compute result to the widgets + state (main thread only)."""
+        self.lag = result['lag']
+        self.gamma = result['gamma']
+        self.npoints = result['npoints']
+        self.variancia = result['variancia']
+        self.models = result['models']
+        self.model = result['model']
+        self.gamma_t = result['gamma_t']
+        self.active_distance = result['active_distance']
+        self.lag_distance = result['lag_distance']
+
+        nugget = result['nugget']
+        range_ = result['range_']
+        sill = result['sill']
+
+        if initial_variogram:
+            # setCurrentIndex would re-trigger on_model_combo_changed; guard it.
             try:
                 self.view.comboBox_Modelo.currentIndexChanged.disconnect()
             except TypeError:
                 pass
-
-            # Get parameters
-            self.active_distance = float(self.view.lineEdit_OK_DMax.text())
-            self.lag_distance = float(self.view.lineEdit_OK_lags_dist.text())
-
-            # Build semivariogram
-            semiv = semivariogram.Semivariogram(self.data_ctrl.xy, self.data_ctrl.z)
-            self.variancia = semiv.sample_variance
-
-            # Calculate experimental semivariogram
-            self.lag, self.gamma, self.npoints = semiv.Exp_Semiv(
-                self.lag_distance, self.active_distance
-            )
-
-            # Ensure minimum 2 lags
-            while len(self.npoints) < 2:
-                self.lag_distance -= 1
-                self.lag, self.gamma, self.npoints = semiv.Exp_Semiv(
-                    self.lag_distance, self.active_distance
-                )
-
-            # Initial calculation - fit multiple models
-            if initial_variogram:
-                use_models = ['linear', 'linear-sill', 'exponential', 'spherical', 'gaussian']
-
-                while True:
-                    try:
-                        self.models = semiv.Fit(use_models)
-                        break
-                    except ValueError as e:
-                        if 'is infeasible' in str(e):
-                            self.lag_distance += 1
-                            self.lag, self.gamma, self.npoints = semiv.Exp_Semiv(
-                                self.lag_distance, self.active_distance
-                            )
-                        else:
-                            raise
-
-                # Find best model (minimum RSS)
-                min_rss = self.models['linear'][3]
-                best_model = 'linear'
-
-                for model_name in self.models:
-                    if self.models[model_name][3] < min_rss:
-                        min_rss = self.models[model_name][3]
-                        best_model = model_name
-
-                # Set model combo
-                model_map = {
-                    'linear': 0,
-                    'linear-sill': 1,
-                    'exponential': 2,
-                    'spherical': 3,
-                    'gaussian': 4
-                }
-                self.view.comboBox_Modelo.setCurrentIndex(model_map.get(best_model, 0))
-                self.model = best_model
-
-                # Calculate theoretical semivariogram
-                nugget, range_, sill = self.models[self.model][0:3]
-                self.gamma_t, rss, r2 = semiv.Gamma(self.model, [nugget, range_, sill])
-
-                rss_val = self.models[self.model][3]
-                r2_val = self.models[self.model][4]
-
-                # Establish the OK neighbour-count / search-radius limits + defaults
-                # (ported from the old pushButton_ImportQGIS tail; the kriging/variogram
-                # edit handlers clamp against these). Stored on data_ctrl so a single
-                # owner holds them, and only meaningful on the initial fit.
-                n_data = len(self.data_ctrl.data)
-                self.data_ctrl.VB_OK_Minimum = 4
-                self.data_ctrl.VB_OK_Maximum = n_data
-                self.data_ctrl.Raio_OK_Minimum = self.data_ctrl.min_dist
-                self.data_ctrl.Raio_OK_Maximum = self.data_ctrl.max_dist
-                if self.kriging_view is not None:
-                    if n_data >= 16:
-                        self.kriging_view.lineEdit_OK_VBNumMax.setText('16')
-                    else:
-                        self.kriging_view.lineEdit_OK_VBNumMax.setText(str(round(n_data / 2)))
-                    self.kriging_view.lineEdit_OK_VBRaio.setText('%.3f' % self.data_ctrl.max_dist)
-
-            # Update calculation - use selected model
-            else:
-                # Get selected model
-                model_idx = self.view.comboBox_Modelo.currentIndex()
-                model_names = ['linear', 'linear-sill', 'exponential', 'spherical', 'gaussian']
-                use_models = [model_names[model_idx]] if model_idx < len(model_names) else ['linear']
-
-                while True:
-                    try:
-                        self.models = semiv.Fit(use_models)
-                        break
-                    except ValueError as e:
-                        if 'is infeasible' in str(e):
-                            self.lag_distance += 1
-                            self.lag, self.gamma, self.npoints = semiv.Exp_Semiv(
-                                self.lag_distance, self.active_distance
-                            )
-                        else:
-                            raise
-
-                self.model = use_models[0]
-
-                # Use user-provided parameters if set
-                if nugget_range_sill:
-                    nugget = float(self.view.lineEdit_Nugget.text())
-                    range_ = float(self.view.lineEdit_Range.text())
-                    sill = float(self.view.lineEdit_Sill.text())
-
-                    self.models[self.model][0] = nugget
-                    self.models[self.model][1] = range_
-                    self.models[self.model][2] = sill
-                else:
-                    nugget, range_, sill = self.models[self.model][0:3]
-
-                # Calculate theoretical
-                self.gamma_t, rss, r2 = semiv.Gamma(self.model, [nugget, range_, sill])
-                rss_val = rss
-                r2_val = r2
-
-            # Update UI
-            self.view.lineEdit_OK_lags_dist.setText('%.3f' % self.lag_distance)
-            self.view.lineEdit_Var_RMSE.setText('%.3f' % rss_val)
-
-            # R^2 clamp to [-inf, +inf] outside [-1, 1] (ported from old logic).
-            if -1 <= r2_val <= 1:
-                self.view.lineEdit_Var_R2.setText('%.3f' % r2_val)
-            elif r2_val < -1:
-                self.view.lineEdit_Var_R2.setText('-inf')
-            else:  # r2_val > 1
-                self.view.lineEdit_Var_R2.setText('+inf')
-
-            # ---- Dynamic slider / parameter-bounds block -----------------------
-            # The edit handlers (on_nugget_edited, on_sill_edited, on_range_edited)
-            # clamp against C0_Maximum / C0_C_Maximum / Range_Maximum, so those MUST
-            # be (re)computed here every recalculation.
-            self._configure_parameter_sliders(semiv, nugget, range_, sill)
-
-        except Exception as e:
-            self._show_warning(self.tr('Error'), str(e))
-        finally:
-            # Reconnect model combo
+            self.view.comboBox_Modelo.setCurrentIndex(result['model_index'])
             try:
                 self.view.comboBox_Modelo.currentIndexChanged.connect(self.on_model_combo_changed)
             except (AttributeError, TypeError):
                 pass
 
-    def _configure_parameter_sliders(self, semiv, nugget, range_, sill):
+            # OK neighbour-count / search-radius limits + defaults (initial only).
+            n_data = result['n_data']
+            self.data_ctrl.VB_OK_Minimum = 4
+            self.data_ctrl.VB_OK_Maximum = n_data
+            self.data_ctrl.Raio_OK_Minimum = self.data_ctrl.min_dist
+            self.data_ctrl.Raio_OK_Maximum = self.data_ctrl.max_dist
+            if self.kriging_view is not None:
+                if n_data >= 16:
+                    self.kriging_view.lineEdit_OK_VBNumMax.setText('16')
+                else:
+                    self.kriging_view.lineEdit_OK_VBNumMax.setText(str(round(n_data / 2)))
+                self.kriging_view.lineEdit_OK_VBRaio.setText('%.3f' % self.data_ctrl.max_dist)
+
+        self.view.lineEdit_OK_lags_dist.setText('%.3f' % self.lag_distance)
+        self.view.lineEdit_Var_RMSE.setText('%.3f' % result['rss_val'])
+
+        # R^2 clamp to [-inf, +inf] outside [-1, 1] (ported from old logic).
+        r2_val = result['r2_val']
+        if -1 <= r2_val <= 1:
+            self.view.lineEdit_Var_R2.setText('%.3f' % r2_val)
+        elif r2_val < -1:
+            self.view.lineEdit_Var_R2.setText('-inf')
+        else:
+            self.view.lineEdit_Var_R2.setText('+inf')
+
+        self._configure_parameter_sliders(
+            result['gamma_last'], result['max_dist'], nugget, range_, sill
+        )
+
+    # Async (single-flight) recompute ----------------------------------------
+    def _recompute_and_plot(self, initial_variogram, nugget_range_sill, on_done=None):
+        """Recompute the variogram off the UI thread, then apply + plot.
+
+        Single-flight: at most one worker runs; the latest request made while a
+        worker is busy is remembered and launched when it finishes, so rapid
+        slider drags neither pile up threads nor render out of order.
+        """
+        if self.data_ctrl.xy is None or self.data_ctrl.z is None:
+            return
+        try:
+            request = self._read_variogram_request(initial_variogram, nugget_range_sill)
+        except (ValueError, AttributeError):
+            return  # incomplete line-edit text mid-typing; ignore this tick
+
+        if self._var_worker is not None and self._var_worker.isRunning():
+            self._var_pending = (initial_variogram, nugget_range_sill, on_done)
+            return
+
+        semiv = self._get_semivariogram()
+        worker = VariogramWorker(self._compute_variogram, semiv, request)
+        worker.finished.connect(
+            lambda res, i=initial_variogram, od=on_done: self._on_variogram_computed(res, i, od)
+        )
+        worker.error.connect(self._on_variogram_error)
+        worker.finished.connect(worker.deleteLater)
+        self._var_worker = worker
+        worker.start()
+
+    def _on_variogram_computed(self, result, initial_variogram, on_done):
+        """Apply a worker result + redraw, then run any queued request."""
+        try:
+            self._apply_variogram_result(result, initial_variogram)
+            self.plot_variogram()
+            if on_done is not None:
+                on_done()
+        except Exception as e:
+            self._show_warning(self.tr('Error'), str(e))
+        finally:
+            self._var_worker = None
+            self._launch_pending_variogram()
+
+    def _on_variogram_error(self, message):
+        """Worker compute failed."""
+        self._var_worker = None
+        self._show_warning(self.tr('Error'), message)
+        self._launch_pending_variogram()
+
+    def _launch_pending_variogram(self):
+        """Launch the most recent request queued while a worker was running."""
+        if self._var_pending is not None:
+            initial_variogram, nugget_range_sill, on_done = self._var_pending
+            self._var_pending = None
+            self._recompute_and_plot(initial_variogram, nugget_range_sill, on_done)
+
+    def _configure_parameter_sliders(self, gamma_last, max_dist, nugget, range_, sill):
         """Set parameter bounds and (re)configure the Nugget/Sill/Range sliders.
 
         Ported from the old calculate_variogram tail (~3324-3424). Computes:
           C0_Maximum  = gamma[-1]
           C0_C_Maximum = gamma[-1] * 3
-          Range_Maximum = semiv.max_dist
+          Range_Maximum = max_dist
         Hides the sliders entirely if any slider maximum would overflow Qt's int
         range (> 2147483647), otherwise shows/reconnects them with proper bounds.
         """
-        gamma_last = self.gamma[len(self.gamma) - 1]
-
         # Overflow guard: Qt slider values are 32-bit ints scaled by 1000.
         if ((gamma_last * 1000) > 2147483647 or
-                (semiv.max_dist * 1000) > 2147483647 or
+                (max_dist * 1000) > 2147483647 or
                 ((gamma_last * 3) * 1000) > 2147483647):
             self.hide_horizontalSlider = True
         else:
@@ -260,7 +362,7 @@ class VariogramController:
             self.view.horizontalSlider_Nugget.valueChanged.connect(self.on_nugget_slider_changed)
 
         # ---- Range ---------------------------------------------------------
-        self.Range_Maximum = semiv.max_dist
+        self.Range_Maximum = max_dist
         self.Range_Minimum = 0.001
         if self.hide_horizontalSlider:
             self.view.horizontalSlider_Range.hide()
@@ -271,7 +373,7 @@ class VariogramController:
                 self.view.horizontalSlider_Range.valueChanged.disconnect()
             except TypeError:
                 pass
-            self.view.horizontalSlider_Range.setMaximum(int(semiv.max_dist * 1000))
+            self.view.horizontalSlider_Range.setMaximum(int(max_dist * 1000))
             self.view.horizontalSlider_Range.setValue(int(range_ * 1000))
             self.view.lineEdit_Range.setText('%.3f' % range_)
             self.view.horizontalSlider_Range.valueChanged.connect(self.on_range_slider_changed)
@@ -390,8 +492,7 @@ class VariogramController:
     def on_model_combo_changed(self, value):
         """Change variogram model and recalculate."""
         self._set_result_tab(0)
-        self.calculate_variogram(initial_variogram=False, nugget_range_sill=False)
-        self.plot_variogram()
+        self._recompute_and_plot(False, False)
 
     # Parameter tuning
     def on_dmax_edited(self):
@@ -453,8 +554,7 @@ class VariogramController:
                 self.view.horizontalSlider_Nugget.valueChanged.connect(self.on_nugget_slider_changed)
 
             self._set_result_tab(0)
-            self.calculate_variogram(initial_variogram=False, nugget_range_sill=True)
-            self.plot_variogram()
+            self._recompute_and_plot(False, True)
         except ValueError:
             pass
 
@@ -463,8 +563,7 @@ class VariogramController:
         self._set_result_tab(0)
         nugget = float(value) / 1000.0
         self.view.lineEdit_Nugget.setText('%.3f' % nugget)
-        self.calculate_variogram(initial_variogram=False, nugget_range_sill=True)
-        self.plot_variogram()
+        self._recompute_and_plot(False, True)
 
     def on_sill_edited(self):
         """Validate sill and recalculate."""
@@ -487,8 +586,7 @@ class VariogramController:
                 self.view.horizontalSlider_Sill.valueChanged.connect(self.on_sill_slider_changed)
 
             self._set_result_tab(0)
-            self.calculate_variogram(initial_variogram=False, nugget_range_sill=True)
-            self.plot_variogram()
+            self._recompute_and_plot(False, True)
         except ValueError:
             pass
 
@@ -497,8 +595,7 @@ class VariogramController:
         self._set_result_tab(0)
         sill = float(value) / 1000.0
         self.view.lineEdit_Sill.setText('%.3f' % sill)
-        self.calculate_variogram(initial_variogram=False, nugget_range_sill=True)
-        self.plot_variogram()
+        self._recompute_and_plot(False, True)
 
     def on_range_edited(self):
         """Validate range and recalculate."""
@@ -521,8 +618,7 @@ class VariogramController:
                 self.view.horizontalSlider_Range.valueChanged.connect(self.on_range_slider_changed)
 
             self._set_result_tab(0)
-            self.calculate_variogram(initial_variogram=False, nugget_range_sill=True)
-            self.plot_variogram()
+            self._recompute_and_plot(False, True)
         except ValueError:
             pass
 
@@ -531,8 +627,7 @@ class VariogramController:
         self._set_result_tab(0)
         range_ = float(value) / 1000.0
         self.view.lineEdit_Range.setText('%.3f' % range_)
-        self.calculate_variogram(initial_variogram=False, nugget_range_sill=True)
-        self.plot_variogram()
+        self._recompute_and_plot(False, True)
 
     def on_vb_num_max_edited(self):
         """Validate kriging neighbor count."""
@@ -583,15 +678,13 @@ class VariogramController:
         self.kriging_view.lineEdit_OK_VBRaio.setText('%.3f' % self.data_ctrl.max_dist)
 
         self.Variogram = False
-        self.calculate_variogram(initial_variogram=True, nugget_range_sill=False)
-        self.view.lineEdit_OK_lags_dist.setText('%.3f' % self.lag_distance)
 
-        self.plot_variogram()
+        def _done():
+            self.view.pushButton_VariogramaSave.setEnabled(True)
+            self.kriging_view.pushButton_Validacao_Cruzada_OK.setEnabled(True)
+            self.Variogram = True
 
-        self.view.pushButton_VariogramaSave.setEnabled(True)
-        self.kriging_view.pushButton_Validacao_Cruzada_OK.setEnabled(True)
-
-        self.Variogram = True
+        self._recompute_and_plot(True, False, on_done=_done)
 
     def on_variogram_adjust_clicked(self):
         """Adjust variogram with current parameters."""
@@ -604,18 +697,13 @@ class VariogramController:
 
         self._set_result_tab(0)
 
-        if not self.Variogram:
-            self.calculate_variogram(initial_variogram=True, nugget_range_sill=False)
-        else:
-            self.calculate_variogram(initial_variogram=False, nugget_range_sill=False)
+        def _done():
+            self.view.pushButton_VariogramaSave.setEnabled(True)
+            self.kriging_view.pushButton_Validacao_Cruzada_OK.setEnabled(True)
+            self.Variogram = True
 
-        self.view.lineEdit_OK_lags_dist.setText('%.3f' % self.lag_distance)
-        self.plot_variogram()
-
-        self.view.pushButton_VariogramaSave.setEnabled(True)
-        self.kriging_view.pushButton_Validacao_Cruzada_OK.setEnabled(True)
-
-        self.Variogram = True
+        # initial fit when no variogram exists yet, otherwise a model-only refit
+        self._recompute_and_plot(not self.Variogram, False, on_done=_done)
 
     def on_variogram_save_clicked(self):
         """Save the current semivariogram parameters to 0_Semivariograms_<layer>.csv.

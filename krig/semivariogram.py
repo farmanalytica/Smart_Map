@@ -120,24 +120,26 @@ class Semivariogram:
             point pairs used to build each lag.
         """
 
-        # Drop point pairs farther apart than the active distance
-        remove_index=self.var[self.var['lag'] > active_dist ].index
-        self.var=self.var.drop(remove_index)
+        # Keep point pairs within the active distance. Non-destructive: filter a
+        # view instead of dropping from self.var, so the (expensive) pairwise
+        # distance table can be reused across repeated calls with different
+        # active_dist / lag widths (variogram tuning).
+        var = self.var[self.var['lag'] <= active_dist]
 
         # Bin edges used to classify the distances
-        bins=np.arange(self.min_dist,max(self.var['lag']), dist_lag)
+        bins=np.arange(self.min_dist,max(var['lag']), dist_lag)
 
         # Assign each distance to a bin
-        ind = np.digitize(self.var['lag'],bins)
+        ind = np.digitize(var['lag'],bins)
 
         # Mean distance within each bin
-        lag=self.var['lag'].groupby(ind).mean()
+        lag=var['lag'].groupby(ind).mean()
 
         # Mean of the squared differences halved per bin -> Matheron estimator
-        gamma=self.var['gamma'].groupby(ind).mean().div(2)
+        gamma=var['gamma'].groupby(ind).mean().div(2)
 
         # Number of point pairs in each lag
-        npoints=self.var['lag'].groupby(ind).count()
+        npoints=var['lag'].groupby(ind).count()
 
 
         self.lag=lag.to_numpy()     # pandas Series -> numpy
