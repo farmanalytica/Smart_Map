@@ -10,7 +10,11 @@ import matplotlib.pyplot as plt1
 from qgis.PyQt import QtCore, QtWidgets, QtGui
 from qgis.PyQt.QtWidgets import QMessageBox, QTableWidgetItem
 from qgis.PyQt.QtGui import QIcon, QPixmap
-from qgis.core import QgsVectorFileWriter, QgsProject, QgsGeometry
+from qgis.core import (
+    QgsVectorFileWriter, QgsProject, QgsGeometry, QgsCoordinateReferenceSystem,
+)
+
+from ..utils import crs_utm
 
 
 class GridController:
@@ -36,6 +40,9 @@ class GridController:
         self.list_index_out_polygon = []
         self.cols_table_area_contorno = []
         self.lyrCRS_table_atribute = None
+        # Boundary layer reprojected to the working UTM CRS (used as the raster
+        # clip mask so it shares the output CRS). None until a boundary is applied.
+        self.contour_working_layer = None
 
         # SVM state (cleared when grid changes)
         self.SVM_Add_Coord = False
@@ -225,13 +232,26 @@ class GridController:
         if layer is None:
             return
 
-        # Validate CRS
-        layer_crs = layer.crs()
-        if not self._validate_contour_crs(layer_crs):
+        # Reproject the boundary to the working UTM CRS so it aligns with the
+        # (already reprojected) attribute-table data. No CRS rejection / match
+        # check is needed any more: every layer is pulled into the same zone.
+        target_crs = self._target_utm_crs()
+        try:
+            working_layer, working_crs = crs_utm.to_utm_if_needed(layer, target_crs)
+        except Exception as e:
+            self._show_warning(
+                self.tr('Message'),
+                self.tr('Could not reproject the layer to UTM.') + '\n' + str(e)
+            )
             return
 
+        self.contour_working_layer = working_layer
+        if self.lyrCRS_table_atribute is None:
+            self.lyrCRS_table_atribute = working_crs.authid()
+        layer_crs = working_layer.crs()
+
         # Validate geometry type
-        geom_type = layer.geometryType()
+        geom_type = working_layer.geometryType()
         if geom_type not in (0, 2):  # Point or Polygon
             self._show_warning(
                 self.tr('Message'),
@@ -239,24 +259,11 @@ class GridController:
             )
             return
 
-        # Validate CRS match
-        if self.lyrCRS_table_atribute is None:
-            self.lyrCRS_table_atribute = layer_crs.authid()
-
-        layer_authid = layer_crs.authid()
-        if layer_authid != self.lyrCRS_table_atribute:
-            if 'SAD69' not in layer_crs.description():
-                self._show_warning(
-                    self.tr('Message'),
-                    self.tr('The boundary layer CRS differs from the attribute table layer CRS.')
-                )
-                return
-
         # Load boundary
         if geom_type == 2:  # Polygon
-            self._load_polygon_boundary(layer)
+            self._load_polygon_boundary(working_layer)
         else:  # Points
-            self._load_point_boundary(layer, layer_crs)
+            self._load_point_boundary(working_layer, layer_crs)
 
         # Apply boundary
         self._apply_boundary_to_data()
@@ -264,16 +271,19 @@ class GridController:
 
         self._reset_svm_state()
 
-    def _validate_contour_crs(self, layer_crs):
-        """Check if layer CRS is projected (not geographic)."""
-        if layer_crs.isGeographic():
-            msg = (
-                self.tr('The coordinate system must be in UTM.') + '\n' +
-                self.tr('Reproject the input layer to UTM before importing it into Smart-Map.')
-            )
-            self._show_warning(self.tr('Message'), msg)
-            return False
-        return True
+    def _target_utm_crs(self):
+        """Working UTM CRS to align the boundary with the attribute-table data.
+
+        Prefers data_ctrl.target_utm_crs (set on import). Falls back to the
+        tracked attribute-table authid, or None when no data is loaded yet (then
+        the boundary's own UTM zone is estimated).
+        """
+        crs = getattr(self.data_ctrl, 'target_utm_crs', None)
+        if crs is not None:
+            return crs
+        if self.lyrCRS_table_atribute:
+            return QgsCoordinateReferenceSystem(self.lyrCRS_table_atribute)
+        return None
 
     def _load_polygon_boundary(self, layer):
         """Extract polygon vertices as boundary."""

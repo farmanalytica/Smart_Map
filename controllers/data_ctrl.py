@@ -18,6 +18,7 @@ from qgis.core import QgsVectorFileWriter, QgsPointXY, QgsGeometry, QgsProject
 from ..managers.data_manager import DataManager
 from ..managers.export_manager import ExportManager
 from ..utils import functions
+from ..utils import crs_utm
 from ..krig import semivariogram
 
 
@@ -51,6 +52,12 @@ class DataController:
         # Data state
         self.df = None
         self.data = None
+        # Working layer used for analysis/export. When the selected layer is in a
+        # geographic CRS it is auto-reprojected to UTM (target_utm_crs); otherwise
+        # these mirror the selected layer and its CRS. Boundary/dense layers are
+        # reprojected to target_utm_crs so every layer shares one metric CRS.
+        self.working_layer = None
+        self.target_utm_crs = None
         self.data_outlier = None
         self.xy = None
         self.z = None
@@ -181,16 +188,31 @@ class DataController:
 
         selected_layer = self.dialog.mMapLayerComboBox.currentLayer()
 
-        # Validate CRS
-        if not self._validate_layer_crs(selected_layer):
+        # Auto-reproject to UTM when the layer is geographic, so every
+        # distance-based step downstream runs in metres. Projected layers are
+        # used as-is. The working layer + its CRS drive analysis and output CRS.
+        try:
+            self.working_layer, self.target_utm_crs = crs_utm.to_utm_if_needed(selected_layer)
+        except Exception as e:
+            self._show_warning(
+                self.tr('Message'),
+                self.tr('Could not reproject the layer to UTM.') + '\n' + str(e)
+            )
             return
 
+        # Boundary CRS state (owned by grid_ctrl) tracks the working UTM CRS so
+        # the boundary/dense layers are aligned to the same zone.
+        if self.grid_ctrl is not None:
+            self.grid_ctrl.lyrCRS_table_atribute = self.target_utm_crs.authid()
+        self.dialog.label_CRS_Layer.show()
+        self.dialog.label_CRS_Layer.setText('CRS Layer: ' + self.target_utm_crs.authid())
+
         # Check point count, resample if needed
-        if not self._check_point_count(selected_layer):
+        if not self._check_point_count(self.working_layer):
             return
 
         # Load data
-        self._load_layer_to_dataframe(selected_layer)
+        self._load_layer_to_dataframe(self.working_layer)
 
         # Clean data
         self._clean_data()
@@ -217,18 +239,6 @@ class DataController:
         # clipped and the boundary is plotted. Boundary logic is owned by grid_ctrl.
         if self.dialog.checkBox_Area_Contorno.isChecked() and self.grid_ctrl is not None:
             self.grid_ctrl.on_contour_apply_clicked()
-
-    def _validate_layer_crs(self, layer):
-        """Check if layer is in projected coordinates (not geographic)."""
-        crs = layer.crs()
-        if crs.isGeographic():
-            msg = (
-                self.tr('The coordinate system must be in UTM.') + '\n' +
-                self.tr('Reproject the input layer to UTM before importing it into Smart-Map.')
-            )
-            self._show_warning(self.tr('Message'), msg)
-            return False
-        return True
 
     def _check_point_count(self, layer):
         """Check if point count exceeds limit, offer resampling."""
@@ -790,9 +800,14 @@ class DataController:
         contour_checked = self.dialog.checkBox_Area_Contorno.isChecked()
         contour_layer = None
         if self.dialog.mMapLayerComboBox_AreaCont.currentIndex() >= 0:
-            contour_layer = self.dialog.mMapLayerComboBox_AreaCont.currentLayer()
+            # Use the UTM-reprojected boundary (owned by grid_ctrl) so the clip
+            # mask shares the raster CRS; fall back to the selected layer.
+            contour_layer = getattr(self.grid_ctrl, 'contour_working_layer', None)
+            if contour_layer is None:
+                contour_layer = self.dialog.mMapLayerComboBox_AreaCont.currentLayer()
 
-        source_layer = self.dialog.mMapLayerComboBox.currentLayer()
+        # Working (UTM) layer drives the output CRS; fall back to the selection.
+        source_layer = self.working_layer or self.dialog.mMapLayerComboBox.currentLayer()
 
         return self.export_manager.export_raster_to_qgis(
             input_table, output_tiff, output_name, z_field,
@@ -819,7 +834,7 @@ class DataController:
 
     def export_shapefile_resampled_to_qgis(self, input_table, output_shp, output_name):
         """Export resampled points to shapefile (delegates to ExportManager)."""
-        source_layer = self.dialog.mMapLayerComboBox.currentLayer()
+        source_layer = self.working_layer or self.dialog.mMapLayerComboBox.currentLayer()
         return self.export_manager.export_shapefile_resampled_to_qgis(
             input_table, output_shp, output_name,
             self.Cord_X, self.Cord_Y, source_layer

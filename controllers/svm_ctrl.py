@@ -44,6 +44,7 @@ from qgis.PyQt.QtGui import QIcon, QPixmap
 from qgis.core import QgsMapLayerType, QgsPointXY, QgsGeometry, QgsProject
 
 from ..utils import functions
+from ..utils import crs_utm
 
 system = platform.system()  # [Windows, Linux, Darwin]
 if system != 'Darwin':
@@ -154,6 +155,21 @@ class SVMController:
             self.Raio_SVM_Minimum = self.data_ctrl.min_dist
         if self.Raio_SVM_Maximum is None:
             self.Raio_SVM_Maximum = self.data_ctrl.max_dist
+
+    def _dense_layer_in_working_crs(self, layer):
+        """Reproject a dense covariate layer to the working UTM CRS.
+
+        Vector layers are reprojected in-memory, rasters are warped. Returns the
+        layer unchanged when no target CRS is known yet or it already matches.
+        """
+        target_crs = getattr(self.data_ctrl, 'target_utm_crs', None)
+        if layer is None or target_crs is None:
+            return layer
+        if layer.crs().authid() == target_crs.authid():
+            return layer
+        if layer.type() == QgsMapLayerType.RasterLayer:
+            return crs_utm.reproject_raster(layer, target_crs)
+        return crs_utm.reproject_vector(layer, target_crs)
 
     # ------------------------------------------------- load train tables
     def load_datatable_SVM_Trainfeatures(self):
@@ -299,9 +315,9 @@ class SVMController:
     def on_dense_layer_combo_changed(self, index=None):
         """Handle dense-layer selection (ported from mMapLayerComboBox_DenseLayer_changed).
 
-        FIX: the old/new stub compared layer.crs().authid() against the Cord_X column
-        name. The correct check compares the dense layer CRS against the attribute-table
-        layer CRS (lyrCRS_table_atribute), honouring the SAD69 -> project-CRS special case.
+        The dense layer may be in any CRS: it is reprojected to the working UTM
+        CRS when its covariates are consumed (on_add_feature_clicked), so this
+        handler only populates the feature combos.
         """
         if self.view.comboBox_SVM_Fonte.currentIndex() != 1:  # only for Dense Layer source
             return
@@ -313,25 +329,9 @@ class SVMController:
         if selectedLayer is None:
             return
 
-        coordenate_reference = selectedLayer.crs().description()
-        if 'SAD69' in coordenate_reference:
-            lyrCRS = QgsProject.instance().crs().authid()  # project CRS, e.g. EPSG:32723
-        else:
-            lyrCRS = selectedLayer.crs().authid()
-
-        # Attribute-table layer CRS is owned by grid_ctrl.
-        lyrCRS_table_atribute = None
-        grid_ctrl = getattr(self.data_ctrl, 'grid_ctrl', None)
-        if grid_ctrl is not None:
-            lyrCRS_table_atribute = getattr(grid_ctrl, 'lyrCRS_table_atribute', None)
-
-        if (lyrCRS_table_atribute is not None) and (lyrCRS != lyrCRS_table_atribute):
-            self._show_warning(
-                self.tr('Message'),
-                self.tr('The CRS of the selected layer differs from the CRS of the Attribute Table layer.')
-            )
-            return
-
+        # No CRS-match check: the dense layer is reprojected to the working UTM
+        # CRS when its covariates are consumed (see on_add_feature_clicked), so a
+        # differing CRS is handled automatically rather than rejected here.
         if selectedLayer.type() == QgsMapLayerType.RasterLayer:
             self.view.comboBox_SVM_Features.setEnabled(False)
             self.view.pushButton_SVM_Add_Feature.setEnabled(True)
@@ -695,6 +695,9 @@ class SVMController:
         elif self.view.comboBox_SVM_Fonte.currentIndex() == 1:
 
             selectedLayer = self.view.mMapLayerComboBox_DenseLayer.currentLayer()
+            # Pull the dense covariate layer into the working UTM CRS so its
+            # coordinates match the (reprojected) sample data and grid.
+            selectedLayer = self._dense_layer_in_working_crs(selectedLayer)
 
             if selectedLayer.type() == QgsMapLayerType.RasterLayer:
                 dim = selectedLayer.extent().toString()
